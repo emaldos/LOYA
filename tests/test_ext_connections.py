@@ -638,7 +638,9 @@ class InstallTest(unittest.TestCase):
         p=conn.install_plan("codex_cli","native")
         r=conn.install_os_terminal("codex_cli","native",p["token"])
         self.assertEqual("fake-term",r["terminal"])
-        self.assertEqual([("curl -fsSL https://chatgpt.com/codex/install.sh | sh",None)],self.opened)
+        # The OS terminal cannot be read, so Codex runs with its own switch that skips its questions (install.sh line 6 / 1014).
+        self.assertEqual([("curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh",None)],self.opened)
+        self.assertEqual("curl -fsSL https://chatgpt.com/codex/install.sh | sh",conn.install_plan("codex_cli","native","shell")["command"])  # a LOYA tab runs the plain line
         with self.assertRaises(conn.ConnectionError_):conn.install_os_terminal("codex_cli","native",p["token"])  # single use
         p=conn.install_plan("claude_code","native","shell")
         self.assertEqual("curl -fsSL https://claude.ai/install.sh | bash",conn.install_command("claude_code","native","shell",p["token"]))
@@ -654,7 +656,8 @@ class InstallTest(unittest.TestCase):
             self.assertEqual("curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",conn.install_command("claude_code","native","cmd",p["token"]))
             p=conn.install_plan("codex_cli","native")
             conn.install_os_terminal("codex_cli","native",p["token"])
-            self.assertEqual((None,'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'),self.opened[-1])
+            self.assertEqual((None,'set "CODEX_NON_INTERACTIVE=1" && powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'),self.opened[-1])
+            self.assertIn("answer N",p["os_note"])
             with self.assertRaises(conn.ConnectionError_):conn.install_plan("claude_code","winget","pwsh")  # manual only
         finally:
             conn._which=orig
@@ -663,6 +666,136 @@ class InstallTest(unittest.TestCase):
         self.tool("curl");self.tool("bash");self.tool("claude","echo 2.1.400")
         with self.assertRaises(conn.ConnectionError_):conn.install_plan("claude_code","native","shell")
         self.assertTrue(conn.detect("claude_code")["installed"])
+class InstallPromptTest(unittest.TestCase):
+    """Step 3: the installer's questions in a LOYA terminal tab. Real output samples; no installer is run."""
+    CODEX_LINUX=("\x1b[1;36m==>\x1b[0m Installing Codex CLI 0.172.0\r\n\x1b[1;36m==>\x1b[0m Current terminal: codex\r\n"
+                 "\x1b[1;36m==>\x1b[0m Future terminals: open a new terminal and run: codex\r\nCodex CLI 0.172.0 installed successfully.\r\n"
+                 "Start Codex now? [y/N] ")
+    CODEX_WINDOWS="Codex CLI 0.172.0 installed successfully.\r\nStart Codex now? [y/N]: "
+    def watch(self,text,alive=True,installed=None):
+        state={"text":text,"alive":alive,"path":installed,"writes":[]}
+        w=conn._InstallWatch("codex_cli","s1",reader=lambda:state["text"],writer=lambda d:(state["writes"].append(d),True)[1],
+                             alive=lambda:state["alive"],finder=lambda:state["path"],versioner=lambda p:"codex-cli 0.172.0")
+        return w,state
+    def test_known_codex_prompt_in_real_output(self):
+        for raw in (self.CODEX_LINUX,self.CODEX_WINDOWS):
+            hit=conn.detect_prompt(conn.prompt_text(raw),"codex_cli")
+            self.assertEqual("known",hit["kind"]);self.assertEqual("codex_start_now",hit["rule"]);self.assertEqual("n",hit["send"])
+            self.assertEqual("Start Codex now? [y/N]",hit["question"])
+            self.assertEqual('The installer asked "Start Codex now? [y/N]". LOYA NG answered No; you can start it from the AI panel later.',hit["message"])
+    def test_partial_last_line_and_colour_codes(self):
+        # The question is the unfinished last line (no newline yet), coloured; output above it is ignored.
+        raw="done\r\n\x1b[33mUninstall the existing npm-managed Codex now?\x1b[0m [y/N] "
+        hit=conn.detect_prompt(conn.prompt_text(raw),"codex_cli")
+        self.assertEqual("codex_uninstall_other",hit["rule"]);self.assertEqual("n",hit["send"])
+        # Once answered (echo + newline), nothing is waiting any more.
+        self.assertIsNone(conn.detect_prompt(conn.prompt_text(raw+"n\r\n"),"codex_cli"))
+        # A question in the scrollback is not a question waiting now.
+        self.assertIsNone(conn.detect_prompt(conn.prompt_text(self.CODEX_LINUX+"n\r\nuser@kali:~$ "),"codex_cli"))
+    def test_unknown_prompts_are_asked_not_answered(self):
+        for line,choices in (("Continue? [Y/n] ",["yes","no","enter"]),("Overwrite config (y/n): ",["yes","no","enter"]),
+                             ("Press Enter to continue",["enter"]),("Proceed [yes/no]? ",["yes","no","enter"])):
+            hit=conn.detect_prompt(conn.prompt_text("x\r\n"+line))
+            self.assertEqual("ask",hit["kind"],line);self.assertEqual(choices,[c["id"] for c in hit["choices"]],line)
+        self.assertIsNone(conn.detect_prompt("Is this ok?",quiet=0.5))  # a "?" line only after the output went quiet
+        self.assertEqual("ask",conn.detect_prompt("Is this ok?",quiet=5)["kind"])
+        self.assertIsNone(conn.detect_prompt("imanovel@kali:~$",quiet=60))
+        # Codex's older-install question on Windows stops the install when answered No: always the operator's choice.
+        hit=conn.detect_prompt("Replace it with the current Codex setup now? [y/N]: ","codex_cli")
+        self.assertEqual("ask",hit["kind"]);self.assertIn("stops the install",hit["note"])
+        self.assertEqual("ask",conn.detect_prompt("Start Codex now? [y/N]","claude_code")["kind"])  # rules are per CLI
+    def test_auto_answer_is_written_once(self):
+        w,st=self.watch(self.CODEX_LINUX)
+        for t in range(5):w.tick(now=100+t)
+        self.assertEqual(["n\r"],st["writes"])  # Linux pty: CR is Enter
+        st["text"]=self.CODEX_LINUX+"\r\n"  # the installer printed only a newline: still answered once
+        w.tick(now=110)
+        st["text"]=self.CODEX_LINUX+"n\r\nStart Codex now? [y/N] "  # same question again: not answered twice
+        w.tick(now=111);w.tick(now=112)
+        self.assertEqual(["n\r"],st["writes"])
+        v=w.view()
+        self.assertEqual(1,len(v["answered"]));self.assertIn("LOYA NG answered No",v["answered"][0]["message"]);self.assertIsNone(v["prompt"])
+    def test_unknown_prompt_needs_an_explicit_answer(self):
+        w,st=self.watch("Downloading\r\nKeep the old settings? [Y/n] ")
+        for t in range(10):w.tick(now=200+t)
+        self.assertEqual([],st["writes"])
+        p=w.view()["prompt"];self.assertEqual("Keep the old settings? [Y/n]",p["question"])
+        self.assertNotIn("_text",p)
+        with self.assertRaises(conn.ConnectionError_):w.answer("forged",p["choices"][0]["id"])
+        with self.assertRaises(conn.ConnectionError_):w.answer(p["id"],"rm -rf")  # only its own choices
+        self.assertEqual([],st["writes"])
+        w.answer(p["id"],"no")
+        self.assertEqual(["n\r"],st["writes"])
+        w.tick(now=230)
+        self.assertEqual(["n\r"],st["writes"]);self.assertIsNone(w.view()["prompt"])
+        with self.assertRaises(conn.ConnectionError_):w.answer(p["id"],"no")  # single use
+    def test_cancel_on_a_question_types_nothing(self):
+        w,st=self.watch("Press Enter to continue")
+        w.tick(now=1)
+        p=w.view()["prompt"]
+        w.dismiss(p["id"])
+        for t in range(5):w.tick(now=10+t)
+        self.assertEqual([],st["writes"]);self.assertIsNone(w.view()["prompt"])
+    def test_verify_sees_the_cli_while_the_installer_still_waits(self):
+        w,st=self.watch("Downloading\r\nKeep the old settings? [Y/n] ",installed=None)
+        w.tick(now=1)
+        self.assertFalse(w.view()["installed"])
+        st["path"]="/home/x/.local/bin/codex"
+        w.tick(now=5)
+        v=w.view()
+        self.assertTrue(st["alive"]);self.assertTrue(v["installed"]);self.assertEqual("codex-cli 0.172.0",v["version"])
+        self.assertIsNotNone(v["prompt"])  # the installer has not exited and still waits; detection did not wait for it
+    def test_enter_matches_the_session_backend(self):
+        ts=conn._ts()
+        class S:pass
+        for backend,fd,want in (("pipe",3,"\r"),("conpty",None,"\r"),("pipe",None,"\r\n"),("elevated",None,"\r\n")):
+            s=S();s.backend=backend;s._master_fd=fd
+            with mock.patch.dict(ts._sessions,{"zz":s}):self.assertEqual(want,conn.enter_for("zz"),backend)
+    def test_watch_start_refuses_unknown_sessions_and_writes_only_there(self):
+        with self.assertRaises(conn.ConnectionError_):conn.install_watch_start("codex_cli","no-such-session")
+        with self.assertRaises(conn.ConnectionError_):conn.install_watch_poll("nope")
+    def test_codex_install_paths(self):
+        old=conn._IS_WINDOWS
+        saved={k:os.environ.get(k) for k in ("CODEX_HOME","CODEX_INSTALL_DIR","LOCALAPPDATA")}
+        try:
+            for k in saved:os.environ.pop(k,None)
+            conn._IS_WINDOWS=False
+            home=os.path.expanduser("~")
+            d=conn._candidate_dirs("codex")
+            self.assertEqual(os.path.join(home,".local","bin"),d[0])
+            self.assertIn(os.path.join(home,".codex","packages","standalone","current","bin"),d)
+            os.environ["CODEX_INSTALL_DIR"]="/opt/mycodex";os.environ["CODEX_HOME"]="/ch"
+            d=conn._candidate_dirs("codex")
+            self.assertEqual("/opt/mycodex",d[0]);self.assertIn(os.path.join("/ch","packages","standalone","current"),d)
+            os.environ.pop("CODEX_INSTALL_DIR");os.environ["LOCALAPPDATA"]="/A/Local"
+            conn._IS_WINDOWS=True
+            d=conn._candidate_dirs("codex")
+            self.assertEqual(os.path.join("/A/Local","Programs","OpenAI","Codex","bin"),d[0])
+        finally:
+            conn._IS_WINDOWS=old
+            for k,v in saved.items():
+                if v is None:os.environ.pop(k,None)
+                else:os.environ[k]=v
+    def test_detection_finds_the_standalone_layout(self):
+        tmp=tempfile.mkdtemp()
+        saved={k:os.environ.get(k) for k in ("HOME","PATH","CODEX_HOME","CODEX_INSTALL_DIR")}
+        try:
+            os.environ["HOME"]=tmp;os.environ["PATH"]=os.path.join(tmp,"empty");os.environ.pop("CODEX_HOME",None);os.environ.pop("CODEX_INSTALL_DIR",None)
+            rel=os.path.join(tmp,".codex","packages","standalone","releases","0.172.0-x86_64-unknown-linux-musl","bin");os.makedirs(rel)
+            exe=os.path.join(rel,"codex")
+            with open(exe,"w") as f:f.write("#!/bin/sh\necho codex-cli 0.172.0\n")
+            os.chmod(exe,0o755)
+            os.symlink(os.path.dirname(rel),os.path.join(tmp,".codex","packages","standalone","current"))
+            os.makedirs(os.path.join(tmp,".local","bin"))
+            os.symlink(os.path.join(tmp,".codex","packages","standalone","current","bin","codex"),os.path.join(tmp,".local","bin","codex"))
+            p,how=conn.find_cli("codex_cli")
+            self.assertEqual(os.path.join(tmp,".local","bin","codex"),p)
+            self.assertEqual("codex-cli 0.172.0",conn.cli_version(p))
+        finally:
+            for k,v in saved.items():
+                if v is None:os.environ.pop(k,None)
+                else:os.environ[k]=v
+            import shutil;shutil.rmtree(tmp,ignore_errors=True)
 class HelpersTest(unittest.TestCase):
     def test_ps_quote(self):
         self.assertEqual("'C:\\a b\\it''s.exe'",conn._ps_quote("C:\\a b\\it's.exe"))

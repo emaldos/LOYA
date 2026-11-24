@@ -100,6 +100,17 @@ class ExternalAgentsAPI:
         return _conn.install_command(tool,method_id,shell_id,token)
     def connection_install_os(self,tool,method_id,token):
         return _conn.install_os_terminal(tool,method_id,token)
+    # The install running in a LOYA terminal tab: its questions (known ones answered by LOYA, others only after a click) and detection.
+    def connection_install_watch_start(self,tool,session_id=""):
+        return _conn.install_watch_start(tool,session_id)
+    def connection_install_watch_poll(self,watch_id):
+        return _conn.install_watch_poll(watch_id)
+    def connection_install_watch_answer(self,watch_id,prompt_id,choice):
+        return _conn.install_watch_answer(watch_id,prompt_id,choice)
+    def connection_install_watch_dismiss(self,watch_id,prompt_id):
+        return _conn.install_watch_dismiss(watch_id,prompt_id)
+    def connection_install_watch_stop(self,watch_id):
+        return _conn.install_watch_stop(watch_id)
     def connection_connect_preview(self,tool):
         return _conn.connect_preview(tool)
     # Background steps: start returns at once; the UI polls and can cancel (a slow or hung CLI never holds a bridge call).

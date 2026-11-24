@@ -80,6 +80,11 @@
 .conn-wiz-elapsed{margin-left:auto;color:var(--text-dim);font-variant-numeric:tabular-nums}
 .conn-wiz-ok{color:#22c55e}
 [data-theme="light"] .conn-wiz-ok{color:#15803d}
+.conn-wiz-watch{display:flex;flex-direction:column;gap:6px}
+.conn-wiz-watch code{overflow-wrap:anywhere}
+.conn-wiz-prompt{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:8px;border:1px solid var(--accent-a);background:var(--accent-a-soft);color:var(--text)}
+.conn-wiz-prompt b{overflow-wrap:anywhere}
+.conn-wiz-prompt .conn-actions{flex-wrap:wrap}
 @keyframes conn-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.conn-wiz-spin{animation:none;border-top-color:var(--accent-a)}}
 /* AI panel: "Claude Code (your CLI)" / "Codex CLI (your CLI)" entry (ext-cli-launch.js). The chat box is hidden for it. */

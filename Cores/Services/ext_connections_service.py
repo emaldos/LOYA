@@ -122,12 +122,25 @@ def _candidate_dirs(exe):
               os.path.join(local,"Programs",exe),os.path.join(local,"Programs",exe,"bin"),
               os.path.join(home,"scoop","shims"),os.path.join(home,".bun","bin"),os.path.join(home,".volta","bin")]
         if exe=="claude":dirs.append(os.path.join(home,".claude","local"))
+        if exe=="codex":dirs=_codex_dirs(home,os.path.join(local,"Programs","OpenAI","Codex","bin"))+dirs
         return dirs
+    if exe=="codex":
+        return _codex_dirs(home,os.path.join(home,".local","bin"))+[os.path.join(home,".npm-global","bin"),os.path.join(home,".bun","bin"),os.path.join(home,".volta","bin"),
+               "/usr/local/bin","/usr/bin","/opt/homebrew/bin","/snap/bin"]+sorted(glob.glob(os.path.join(home,".nvm","versions","node","*","bin")),reverse=True)
     dirs=[os.path.join(home,".local","bin"),os.path.join(home,".npm-global","bin"),os.path.join(home,".bun","bin"),os.path.join(home,".volta","bin"),
           "/usr/local/bin","/usr/bin","/opt/homebrew/bin","/snap/bin"]
     if exe=="claude":dirs.append(os.path.join(home,".claude","local"))
     dirs+=sorted(glob.glob(os.path.join(home,".nvm","versions","node","*","bin")),reverse=True)
     return dirs
+def _codex_dirs(home,visible_default):
+    """Where Codex's standalone installer puts the command (read from install.sh / install.ps1, 2026-11-25):
+    the visible command in $CODEX_INSTALL_DIR, else ~/.local/bin (install.sh line 16) or
+    %LOCALAPPDATA%\\Programs\\OpenAI\\Codex\\bin (install.ps1 lines 992-997); it links to the selected release in
+    $CODEX_HOME/packages/standalone/current (install.sh lines 19-25, install.ps1 lines 975-983), as bin/codex or codex."""
+    codex_home=os.environ.get("CODEX_HOME") or os.path.join(home,".codex")
+    current=os.path.join(codex_home,"packages","standalone","current")
+    custom=os.environ.get("CODEX_INSTALL_DIR")
+    return ([custom] if custom else [])+[visible_default,os.path.join(current,"bin"),current]
 def _names(exe):return [exe+".exe",exe+".cmd",exe+".bat",exe] if _IS_WINDOWS else [exe]
 def find_cli(tool):
     """(path, how) for the official CLI: PATH first, then the usual install folders; (None, "") when not found."""
@@ -517,6 +530,10 @@ def sign_in_os_terminal(tool):
 #   Codex CLI:   https://github.com/openai/codex (README "Installing and running Codex CLI") and
 #                https://developers.openai.com/codex/cli (Quickstart "Install Codex")
 # "lines" gives the line to type per shell family: posix (bash/zsh/sh/fish on Linux), ps (PowerShell 5/7), cmd (Windows cmd).
+# "os_lines" (optional) replaces it in the OS terminal, which LOYA cannot read or answer: the installer's own switch that skips
+# its questions. Codex: CODEX_NON_INTERACTIVE=1 (install.sh lines 6, 100 and 1014-1018; install.ps1 lines 14 and 46-48) makes
+# every [y/N] question answer No without asking ("Start Codex now?", "Uninstall the existing ...-managed Codex now?").
+# In a LOYA terminal the plain vendor line runs and LOYA answers known questions itself (INSTALL_PROMPTS below).
 NODE_URL="https://nodejs.org/en/download"
 INSTALL_METHODS={
     "claude_code":{
@@ -545,6 +562,7 @@ INSTALL_METHODS={
         "linux":[
             {"id":"native","label":"Install script (recommended)","source":"https://chatgpt.com/codex/install.sh","docs":"https://developers.openai.com/codex/cli",
              "lines":{"posix":"curl -fsSL https://chatgpt.com/codex/install.sh | sh"},"requires":["curl","sh"],"auto":True,
+             "os_lines":{"posix":"curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh"},
              "note":"OpenAI's standalone installer, for your user. No sudo."},
             {"id":"npm","label":"npm","source":"https://www.npmjs.com/package/@openai/codex","docs":"https://github.com/openai/codex",
              "lines":{"posix":"npm install -g @openai/codex"},"requires":["npm"],"auto":True,"npm_global":True,
@@ -554,6 +572,7 @@ INSTALL_METHODS={
             {"id":"native","label":"Install script, PowerShell (recommended)","source":"https://chatgpt.com/codex/install.ps1","docs":"https://github.com/openai/codex",
              "lines":{"ps":'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"',"cmd":'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'},
              "requires":["powershell"],"auto":True,
+             "os_lines":{"cmd":'set "CODEX_NON_INTERACTIVE=1" && powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'},
              "note":"OpenAI's standalone installer, for your user. The ExecutionPolicy bypass applies to this one command only."},
             {"id":"npm","label":"npm","source":"https://www.npmjs.com/package/@openai/codex","docs":"https://github.com/openai/codex",
              "lines":{"ps":"npm install -g @openai/codex","cmd":"npm install -g @openai/codex"},"requires":["npm"],"auto":True,
@@ -620,6 +639,16 @@ def _line_for(m,family):
     lines=m["lines"]
     if family in lines:return lines[family]
     return ""
+def _os_note(tool,m):
+    """Shown when the installer runs in the OS terminal, which LOYA NG cannot read or answer."""
+    base="LOYA NG cannot see that window, so answer any question the installer asks there yourself."
+    if tool=="codex_cli":
+        if m.get("os_lines"):return "LOYA NG runs it with CODEX_NON_INTERACTIVE=1, OpenAI's own switch that skips the installer's questions. "+base+" If the installer asks to start Codex, answer N."
+        return base+" If the installer asks to start Codex, answer N."
+    return base
+def _os_line_for(m):
+    fam="cmd" if _IS_WINDOWS else "posix"
+    return (m.get("os_lines") or {}).get(fam) or _line_for(m,fam)
 # One-time confirm tokens: plan() hands one out with the exact command; a run needs it (the UI asks the operator first).
 _confirm={}
 _confirm_lock=threading.Lock()
@@ -636,13 +665,13 @@ def install_plan(tool,method_id,shell_id=""):
         raise ConnectionError_(why)
     family=_shell_family(shell_id) if shell_id else ("cmd" if _IS_WINDOWS else "posix")
     line=_line_for(m,family)
-    os_line=_line_for(m,"cmd" if _IS_WINDOWS else "posix")
+    os_line=_os_line_for(m)
     token=secrets.token_urlsafe(18)
     import time as _t
     with _confirm_lock:
         for k in [k for k,v in _confirm.items() if v["exp"]<_t.time()]:_confirm.pop(k,None)
         _confirm[token]={"tool":tool,"method":method_id,"exp":_t.time()+CONFIRM_TTL}
-    return {"tool":tool,"method":method_id,"label":m["label"],"command":line,"os_command":os_line,"use_loya_terminal":bool(line),
+    return {"tool":tool,"method":method_id,"label":m["label"],"command":line,"os_command":os_line,"use_loya_terminal":bool(line),"os_note":_os_note(tool,m),
             "source":m["source"],"docs":m["docs"],"note":m["note"],"token":token,
             "warning":f"This downloads and runs {TOOL_INFO[tool]['vendor']}'s official installer with your user's permissions. LOYA NG does not use sudo or Administrator rights."}
 def _take_confirm(tool,method_id,token):
@@ -666,18 +695,197 @@ def install_os_terminal(tool,method_id,token):
     tool=_tool(tool)
     m=_method(tool,method_id)
     _take_confirm(tool,method_id,token)
-    if _IS_WINDOWS:
-        line=_line_for(m,"cmd")
-        r=_open_os_terminal(None,line)
-    else:
-        line=_line_for(m,"posix")
-        r=_open_os_terminal(line,None)
+    line=_os_line_for(m)
+    r=_open_os_terminal(None,line) if _IS_WINDOWS else _open_os_terminal(line,None)
     _audit("ext_connection",f"{TOOL_INFO[tool]['label']}: install confirmed by the operator, running in {r['terminal']}: {line}",True)
     return r
 def detect(tool):
     """Cheap re-check for the card after an install (no sign-in or version calls)."""
     path,how=find_cli(_tool(tool))
     return {"tool":tool,"installed":bool(path),"path":path or "","found_in":how}
+# ---------------------------------------------------------------- installer questions (a LOYA terminal tab running an installer)
+# While "Install for me" runs in a LOYA terminal tab, a watch reads that session's recent output (terminal_service.peek_output,
+# made plain with plain_terminal_text) and looks at the line the cursor is on. A KNOWN question with a safe answer is answered
+# once, by itself; any other question is only shown, and its answer goes to the terminal after the operator clicks it.
+# Known questions, read from the vendor scripts on 2026-11-25 (fetched and read, never run):
+#   Codex install.sh   line 1021 printf '%s [y/N] ' (prompt_yes_no), line 1061 "Start Codex now?",
+#                      line 1098 "Uninstall the existing $conflict_manager-managed Codex now?"
+#   Codex install.ps1  line 54 Read-Host "$Prompt [y/N]" (Prompt-YesNo, shown as "...? [y/N]: "), line 1263 "Start Codex now?",
+#                      line 920 "Uninstall the existing $manager-managed Codex now?",
+#                      line 513 "Replace it with the current Codex setup now?" (No stops the install: line 514 throws, so it is asked)
+#   Claude Code install.sh / install.ps1 / install.cmd: no question of their own (install.cmd line 71 `set /p` reads a file).
+#   They run `claude install` (install.sh line 227, install.ps1 lines 83/86, install.cmd line 109), a binary; anything it asks
+#   is caught by the unknown-question rules below. The npm routes (`npm install -g`) ask nothing.
+INSTALL_PROMPTS=[
+    {"id":"codex_start_now","tools":("codex_cli",),"rx":re.compile(r"Start Codex now\?\s*\[y/N\]\s*:?$"),"send":"n","answer":"No",
+     "message":'The installer asked "{q}". LOYA NG answered No; you can start it from the AI panel later.'},
+    {"id":"codex_uninstall_other","tools":("codex_cli",),"rx":re.compile(r"Uninstall the existing \S+-managed Codex now\?\s*\[y/N\]\s*:?$"),"send":"n","answer":"No",
+     "message":'The installer asked "{q}". LOYA NG answered No, so your other Codex install stays; PATH order decides which codex runs.'},
+    {"id":"codex_replace_old","tools":("codex_cli",),"rx":re.compile(r"Replace it with the current Codex setup now\?\s*\[y/N\]\s*:?$"),"send":None,
+     "note":"Codex found an older install of its own in that folder. Yes moves it to a backup folder and continues; No stops the install."},
+]
+_YN_RX=re.compile(r"(\[\s*y(?:es)?\s*/\s*n(?:o)?\s*\]|\(\s*y(?:es)?\s*/\s*n(?:o)?\s*\))\s*[:?]?$",re.I)
+_ENTER_RX=re.compile(r"\b(press|hit)\s+(enter|return|any key)\b",re.I)
+_QUESTION_RX=re.compile(r"\?\s*:?$")
+QUESTION_QUIET=3.0   # a line that only ends in "?" counts once the output has been quiet this long
+WATCH_MAX=1800       # a watch gives up after 30 minutes
+WATCH_EVERY=0.4
+_CHOICE_YES={"id":"yes","label":"Yes","send":"y"}
+_CHOICE_NO={"id":"no","label":"No","send":"n"}
+_CHOICE_ENTER={"id":"enter","label":"Enter","send":""}
+def _ts():
+    from Cores.Services import terminal_service as m
+    return m
+def prompt_text(raw,cols=0):
+    """Plain text of raw terminal output (colours, cursor moves and line repaints applied)."""
+    try:return _ts().plain_terminal_text(raw,cols)
+    except Exception:return re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]","",str(raw or "")).replace("\r","")
+def _cursor_line(text):
+    return str(text or "").split("\n")[-1].strip()
+def _show_q(line):return line.rstrip(": ").strip()[:200]
+def detect_prompt(text,tool=None,quiet=0.0):
+    """The question the installer is waiting on, from the plain text of its output (the last, possibly unfinished line):
+    {"kind":"known","rule","question","send","answer","message"} | {"kind":"ask","rule"?,"question","choices","note"?} | None.
+    `quiet`: seconds since the output last changed (a line ending in only "?" needs QUESTION_QUIET)."""
+    line=_cursor_line(text)
+    if not line:return None
+    for r in INSTALL_PROMPTS:
+        if tool and tool not in r["tools"]:continue
+        if r["rx"].search(line):
+            q=_show_q(line)
+            if r.get("send") is None:return {"kind":"ask","rule":r["id"],"question":q,"choices":[_CHOICE_YES,_CHOICE_NO,_CHOICE_ENTER],"note":r.get("note","")}
+            return {"kind":"known","rule":r["id"],"question":q,"send":r["send"],"answer":r["answer"],"message":r["message"].format(q=q)}
+    if _YN_RX.search(line):return {"kind":"ask","question":_show_q(line),"choices":[_CHOICE_YES,_CHOICE_NO,_CHOICE_ENTER]}
+    if _ENTER_RX.search(line):return {"kind":"ask","question":_show_q(line),"choices":[_CHOICE_ENTER]}
+    if _QUESTION_RX.search(line) and quiet>=QUESTION_QUIET:return {"kind":"ask","question":_show_q(line),"choices":[_CHOICE_YES,_CHOICE_NO,_CHOICE_ENTER]}
+    return None
+def enter_for(session_id):
+    """What Enter is for that session: CR for a PTY (Linux openpty: the line discipline turns it into NL; ConPTY: CR is the
+    Enter key, as the panel's full terminal mode sends it), CRLF for the Windows pipe backend (same as termSubmitNewline)."""
+    ts=_ts()
+    try:
+        sess=getattr(ts,"_sessions",{}).get(session_id)
+        backend=ts.session_backend(sess) if sess is not None else ""
+    except Exception:backend=""
+    if backend in ("pty","conpty"):return "\r"
+    if backend:return "\r\n"
+    return "\r\n" if _IS_WINDOWS else "\r"
+class _InstallWatch:
+    def __init__(self,tool,session_id,reader=None,writer=None,alive=None,finder=None,versioner=None):
+        self.id=uuid.uuid4().hex[:16];self.tool=tool;self.session_id=session_id
+        ts=_ts() if session_id else None
+        self._read=reader or (lambda:ts.peek_output(session_id) if ts else None)
+        self._write=writer or (lambda data:ts.write_input(session_id,data))
+        self._alive=alive or (lambda:bool(ts) and ts.session_alive(session_id))
+        self._find=finder or (lambda:find_cli(tool)[0])
+        self._version=versioner or cli_version
+        self.lock=threading.Lock()
+        self.started=time.monotonic();self.stopped=False;self.done=False
+        self.answered=[];self.pending=None;self.done_rules=set()
+        self._last_text=None;self._changed=time.monotonic();self._handled=None
+        self.path="";self.version="";self._next_find=0.0;self._version_tries=0
+        self.session_alive=bool(session_id)
+    def _text(self):
+        raw=self._read()
+        if raw is None:return None
+        return prompt_text(raw)
+    def tick(self,now=None):
+        """One look at the session: answer a known question once, or hold an unknown one for the operator. Also checks
+        whether the CLI is installed yet (the installer may still be waiting on a question when it is)."""
+        now=time.monotonic() if now is None else now
+        with self.lock:
+            if self.session_id:
+                text=self._text()
+                self.session_alive=text is not None and bool(self._alive())
+                if text is not None:
+                    if text!=self._last_text:self._last_text=text;self._changed=now
+                    if self.pending and _cursor_line(text)!=_cursor_line(self.pending["_text"]):self.pending=None  # answered in the terminal, or it moved on
+                    if text!=self._handled and not self.pending and self.session_alive:self._look(text,now-self._changed)
+                if not self.session_alive:self.pending=None
+            if now>=self._next_find:
+                self._next_find=now+1.5
+                if not self.path:
+                    p=self._find()
+                    if p:self.path=p
+                if self.path and not self.version and self._version_tries<5:
+                    self._version_tries+=1
+                    try:self.version=self._version(self.path) or ""
+                    except Exception:self.version=""
+    def _look(self,text,quiet):
+        hit=detect_prompt(text,self.tool,quiet)
+        if not hit:return
+        if hit["kind"]=="known":
+            self._handled=text
+            if hit["rule"] in self.done_rules:return  # each known question is answered once per install
+            self.done_rules.add(hit["rule"])
+            ok=bool(self._write(hit["send"]+enter_for(self.session_id)))
+            self.answered.append({"rule":hit["rule"],"question":hit["question"],"answer":hit["answer"],"message":hit["message"] if ok else
+                                  'The installer asked "'+hit["question"]+'". LOYA NG could not type the answer; answer '+hit["answer"]+" in the terminal tab.","ok":ok})
+            _audit("ext_connection",f"{TOOL_INFO[self.tool]['label']} installer asked \"{hit['question']}\"; LOYA NG answered {hit['answer']}"+("" if ok else " (the write failed)"),ok)
+            return
+        self.pending=dict(hit,id=uuid.uuid4().hex[:10],_text=text)
+    def answer(self,prompt_id,choice_id):
+        """The operator's click: type that choice into the terminal. Only for the question shown, only its own choices."""
+        with self.lock:
+            p=self.pending
+            if not p or p["id"]!=str(prompt_id or ""):raise ConnectionError_("That question is no longer waiting. Check the terminal tab.")
+            c=next((c for c in p["choices"] if c["id"]==choice_id),None)
+            if c is None:raise ConnectionError_("Unknown answer.")
+            self.pending=None;self._handled=p["_text"]
+            ok=bool(self._write(c["send"]+enter_for(self.session_id)))
+            self.answered.append({"rule":p.get("rule",""),"question":p["question"],"answer":c["label"],"ok":ok,
+                                  "message":('The installer asked "'+p["question"]+'". You answered '+c["label"]+".") if ok else "LOYA NG could not type the answer; answer it in the terminal tab."})
+        _audit("ext_connection",f"{TOOL_INFO[self.tool]['label']} installer asked \"{p['question']}\"; the operator answered {c['label']}",ok)
+        return self.view()
+    def dismiss(self,prompt_id):
+        """Cancel on a question: nothing is typed; the operator answers it in the terminal tab (or not at all)."""
+        with self.lock:
+            p=self.pending
+            if p and p["id"]==str(prompt_id or ""):self.pending=None;self._handled=p["_text"]
+        return self.view()
+    def view(self):
+        p=self.pending
+        return {"watch":self.id,"tool":self.tool,"session":self.session_id or "","session_alive":self.session_alive,"done":self.done,
+                "answered":[{k:v for k,v in a.items()} for a in self.answered],
+                "prompt":{k:v for k,v in p.items() if not k.startswith("_")} if p else None,
+                "installed":bool(self.path),"path":self.path,"version":self.version}
+    def run(self):
+        dead_since=None
+        try:
+            while not self.stopped and time.monotonic()-self.started<WATCH_MAX:
+                try:self.tick()
+                except Exception:pass
+                if self.session_id and not self.session_alive:dead_since=dead_since or time.monotonic()
+                else:dead_since=None
+                if (dead_since and time.monotonic()-dead_since>5) or (not self.session_id and self.path and self.version):break
+                time.sleep(WATCH_EVERY)
+        finally:self.done=True
+_watches={}
+_watches_lock=threading.Lock()
+def install_watch_start(tool,session_id=""):
+    """Start watching the install: the LOYA terminal session running the installer (its questions), or none for the OS
+    terminal (then only the CLI's detection). One watch per CLI; a new one replaces the old. Returns its view."""
+    tool=_tool(tool)
+    sid=str(session_id or "")
+    if sid and _ts().peek_output(sid) is None:raise ConnectionError_("That terminal session is not open.")
+    w=_InstallWatch(tool,sid)
+    with _watches_lock:
+        for k in [k for k,x in _watches.items() if x.tool==tool or x.done]:
+            _watches[k].stopped=True;_watches.pop(k,None)
+        _watches[w.id]=w
+    threading.Thread(target=w.run,name=f"loya-install-watch-{tool}",daemon=True).start()
+    return w.view()
+def _get_watch(watch_id):
+    with _watches_lock:w=_watches.get(str(watch_id or ""))
+    if w is None:raise ConnectionError_("The install is no longer watched. Check the terminal tab.")
+    return w
+def install_watch_poll(watch_id):return _get_watch(watch_id).view()
+def install_watch_answer(watch_id,prompt_id,choice):return _get_watch(watch_id).answer(prompt_id,str(choice or ""))
+def install_watch_dismiss(watch_id,prompt_id):return _get_watch(watch_id).dismiss(prompt_id)
+def install_watch_stop(watch_id):
+    with _watches_lock:w=_watches.pop(str(watch_id or ""),None)
+    if w:w.stopped=True
+    return {"stopped":bool(w)}
 def _open_os_terminal(posix_script,cmd_line):
     """Open the OS terminal running one command; the window stays open until Enter. Returns {"opened","terminal"}."""
     if _IS_WINDOWS:

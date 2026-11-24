@@ -159,9 +159,36 @@ i++
 }
 return {done:true,index:CONN_STEPS.length-1}
 }
-// ---- conn pure end
-const connState={root:null,overview:null,busy:{},wizardOpen:false,reached:{}}
 function connEsc(s){return String(s===undefined||s===null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
+// ---- install watch (step 3)
+// The backend watches the LOYA terminal tab running the installer (extAgents.connection_install_watch_*): a known question
+// is answered by LOYA NG itself and listed in `answered`; any other question is `prompt` and is typed into the terminal only
+// after the operator clicks one of its choices. Cancel on a question types nothing.
+// Verify may go on by itself once the CLI and its version are found and no question is waiting.
+function connVerifyReady(wv){return !!(wv&&wv.installed&&wv.version&&!wv.prompt)}
+function connWatchHtml(wv){
+if(!wv)return ""
+const lines=(wv.answered||[]).map((a)=>`<div class="set-status${a.ok===false?" error":" conn-wiz-ok"} conn-wiz-answered">${connEsc(a.message||"")}</div>`).join("")
+let ask=""
+const p=wv.prompt
+if(p){
+const btns=(p.choices||[]).map((c)=>`<button type="button" class="set-btn conn-watch-choice" data-prompt="${connEsc(p.id)}" data-choice="${connEsc(c.id)}">${connEsc(c.label)}</button>`).join("")
+ask=`<div class="conn-wiz-prompt" role="alert"><p>The installer is asking: <b>${connEsc(p.question)}</b></p>${p.note?`<p class="set-info">${connEsc(p.note)}</p>`:""}<p class="set-info">LOYA NG does not answer this one by itself. Pick an answer to type it into the terminal tab, or Cancel to answer it there yourself.</p><div class="conn-actions">${btns}<button type="button" class="set-btn conn-watch-dismiss" data-prompt="${connEsc(p.id)}">Cancel</button></div></div>`
+}
+let found=""
+if(wv.installed)found=`<p class="conn-wiz-done">Found${wv.version?" "+connEsc(wv.version):""} at <code>${connEsc(wv.path)}</code>.${p?" Answer the installer's question first.":wv.version?"":" Reading its version."}</p>`
+else if(wv.session&&!wv.session_alive)found='<p class="set-info">The terminal tab has closed. Press Check again.</p>'
+else found=`<p class="set-info conn-wiz-looking">Looking for it in PATH and the install folders${wv.session?" while the installer runs":""}.</p>`
+return lines+ask+found
+}
+// The result line Verify passes on: what LOYA NG answered for the installer, then where the CLI was found.
+function connVerifyInfo(label,d,wv){
+const said=((wv&&wv.answered)||[]).map((a)=>a.message).filter(Boolean)
+const ver=wv&&wv.version?" "+wv.version:""
+return said.concat(["Found "+label+ver+" at "+d.path+"."]).join(" ")
+}
+// ---- conn pure end
+const connState={root:null,overview:null,busy:{},wizardOpen:false,reached:{},watch:{}}
 function connErr(err){return err&&err.message?err.message:String(err||"Failed")}
 function connPlatform(){return connState.overview&&connState.overview.platform||"linux"}
 function connMountSettings(root){
@@ -311,7 +338,7 @@ function connWizard(tool){
 if(connState.wizardOpen)return Promise.resolve()
 const st0=connState.overview.tools[tool]
 const label=st0.label
-const w={method:"",plan:null,installedVia:"",testResult:null}
+const w={method:"",plan:null,installedVia:"",testResult:null,watchId:connState.watch[tool]||"",watch:null,osNote:""}
 const before=document.activeElement
 const overlay=document.createElement("div")
 overlay.className="confirm-overlay conn-wiz-overlay"
@@ -333,12 +360,14 @@ const okBtn=box.querySelector(".confirm-ok")
 const cancelBtn=box.querySelector(".confirm-cancel")
 let answer=null   // set while a step waits for Approve / Cancel
 let running=null  // the cancel token of what is running now
+let live=null     // the step 3 poll of the install watch
+const stopLive=()=>{if(live){live.off=true;clearTimeout(live.t);live=null}}
 const cancel=()=>{if(answer){answer("cancel");return}if(running)running.cancel()}
 const onKey=(e)=>{if(typeof confirmTrapKey==="function")confirmTrapKey(e,box,cancel);else if(e.key==="Escape"){e.preventDefault();cancel()}}
 document.addEventListener("keydown",onKey,true)
 okBtn.addEventListener("click",()=>answer&&answer("approve"))
 cancelBtn.addEventListener("click",cancel)
-const close=()=>{if(running)running.cancel();document.removeEventListener("keydown",onKey,true);overlay.remove();connState.wizardOpen=false;if(before&&before.focus)try{before.focus()}catch(e){}}
+const close=()=>{stopLive();if(running)running.cancel();document.removeEventListener("keydown",onKey,true);overlay.remove();connState.wizardOpen=false;if(before&&before.focus)try{before.focus()}catch(e){}}
 const markSteps=(index,status)=>box.querySelectorAll(".conn-wiz-steps li").forEach((li)=>{
 const i=Number(li.dataset.i)
 li.classList.toggle("current",i===index)
@@ -369,7 +398,32 @@ const job=(kind,text)=>{const tok=busy(text);return connJobRun(bridgeCall,kind,t
 const wait=(p,text)=>{const tok=busy(text);return Promise.race([Promise.resolve(p),tok.promise.then(()=>{throw CONN_CANCELLED})]).finally(()=>tok.finish())}
 const status=()=>job("status","Checking "+label+": version, sign-in and connection").then((st)=>{connState.overview.tools[tool]=st;return st})
 const head=(v)=>`<div class="conn-wiz-title">Step ${v.index+1} of ${CONN_STEPS.length}: ${connEsc(v.step.title)}</div>`
-const waitAnswer=()=>new Promise((resolve)=>{answer=(a)=>{answer=null;okBtn.disabled=true;resolve(a)}})
+const waitAnswer=()=>new Promise((resolve)=>{answer=(a)=>{answer=null;stopLive();okBtn.disabled=true;resolve(a)}})
+// Step 3: show the installer's questions and the detection live; go on by itself once the CLI is found (not while a question waits).
+const renderWatch=(region,wv)=>{
+w.watch=wv
+region.innerHTML=connWatchHtml(wv)
+const send=(path,args)=>bridgeCall(path,args).then((r)=>{if(r)renderWatch(region,r)}).catch((err)=>{region.insertAdjacentHTML("afterbegin",`<div class="set-status error">${connEsc(connErr(err))}</div>`)})
+region.querySelectorAll(".conn-watch-choice").forEach((b)=>b.addEventListener("click",()=>{region.querySelectorAll("button").forEach((x)=>{x.disabled=true});send("extAgents.connection_install_watch_answer",[w.watchId,b.dataset.prompt,b.dataset.choice])}))
+region.querySelectorAll(".conn-watch-dismiss").forEach((b)=>b.addEventListener("click",()=>send("extAgents.connection_install_watch_dismiss",[w.watchId,b.dataset.prompt])))
+}
+const startLive=(v)=>{
+stopLive()
+const region=bodyEl.querySelector(".conn-wiz-watch")
+if(!w.watchId||!region)return
+const me={off:false,t:null}
+live=me
+const tick=()=>{
+if(me.off)return
+bridgeCall("extAgents.connection_install_watch_poll",[w.watchId]).then((wv)=>{
+if(me.off)return
+if(!(region.contains(document.activeElement)&&document.activeElement.tagName==="BUTTON"&&wv.prompt&&w.watch&&w.watch.prompt&&wv.prompt.id===w.watch.prompt.id))renderWatch(region,wv)
+if(!v.done&&connVerifyReady(wv)&&answer){answer("approve");return}
+me.t=setTimeout(tick,1000)
+}).catch(()=>{if(me.off)return;w.watchId="";delete connState.watch[tool]})
+}
+tick()
+}
 // Builds the step's text (loading what it needs first), then waits for Approve / Cancel.
 const ask=(v)=>{
 markSteps(v.index,v.status)
@@ -389,7 +443,9 @@ bodyEl.querySelectorAll('input[name="connWizMethod"]').forEach((r)=>r.addEventLi
 okBtn.textContent=html.ok||(v.done?"Continue":"Approve")
 okBtn.disabled=!!html.blocked
 ;(okBtn.disabled?cancelBtn:okBtn).focus()
-return waitAnswer()
+const waiting=waitAnswer()
+if(v.step.id==="verify")startLive(v)
+return waiting
 }).catch((err)=>{
 if(connIsCancel(err))return "cancel"
 bodyEl.innerHTML=`${head(v)}<div class="set-status error">${connEsc(connErr(err))}</div><p class="set-info">Cancel closes the assistant; open it again to retry.</p>`
@@ -404,11 +460,13 @@ const p=w.plan
 w.plan=null  // single use
 if(!p)return {retry:true,message:"The install command expired. Approve again to run it."}
 const shell=connLoyaShell()
-const run=shell&&p.use_shell===shell?bridgeCall("extAgents.connection_install_command",[tool,p.method,shell,p.token]).then((line)=>termOpenForRun().then(()=>termNewTab(shell,{name:label+" install",startup:line})).then(()=>"the LOYA NG terminal"))
-:bridgeCall("extAgents.connection_install_os",[tool,p.method,p.token]).then((r)=>r.terminal)
+const watch=(sid)=>bridgeCall("extAgents.connection_install_watch_start",[tool,sid||""]).then((wv)=>{w.watchId=wv.watch;w.watch=wv;connState.watch[tool]=wv.watch}).catch(()=>{w.watchId="";delete connState.watch[tool]})
+w.osNote=""
+const run=shell&&p.use_shell===shell?bridgeCall("extAgents.connection_install_command",[tool,p.method,shell,p.token]).then((line)=>termOpenForRun().then(()=>termNewTab(shell,{name:label+" install",startup:line})).then((sid)=>watch(sid)).then(()=>"the LOYA NG terminal"))
+:bridgeCall("extAgents.connection_install_os",[tool,p.method,p.token]).then((r)=>{w.osNote=p.os_note||"";return watch("").then(()=>r.terminal)})
 return wait(run,"Opening the terminal").then((where)=>{w.installedVia=where;return {info:"The installer is running in "+where+"."}})
 },
-verify:()=>job("detect","Looking for "+label+" in PATH and the install folders").then((d)=>d.installed?{info:"Found "+label+" at "+d.path+"."}:{retry:true,message:"Not found yet. Wait for the installer to finish in "+(w.installedVia||"the terminal")+", then press Check again."}),
+verify:()=>job("detect","Looking for "+label+" in PATH and the install folders").then((d)=>d.installed?{info:connVerifyInfo(label,d,w.watch)}:{retry:true,message:"Not found yet. Wait for the installer to finish in "+(w.installedVia||"the terminal")+", then press Check again."}),
 signin:()=>wait(connOpenSignIn(tool),"Opening "+label+"'s own sign-in").then((where)=>{w.signinVia=where;return {info:"Opened "+where+" with "+label+"'s sign-in. Finish it there; you can connect now and sign in later."}}),
 connect:()=>job("connect","Connecting: starting LOYA NG's MCP server, registering it in "+label+" and installing the LOYA skills").then((r)=>({info:(r&&r.message)||label+" is connected."})),
 test:()=>job("test","Testing: the registration in "+label+", LOYA NG's MCP server and a tool list through the bridge").then((r)=>{w.testResult=r;return r})
@@ -465,8 +523,10 @@ return {body:`<p>Approve opens ${useLoya?"a LOYA NG terminal tab":"your OS termi
 })
 }
 if(v.step.id==="verify"){
-if(v.done)return Promise.resolve({body:`<p class="conn-wiz-done">Found ${connEsc(st.label)}${st.version?" "+connEsc(st.version):""} at <code>${connEsc(st.path)}</code>.</p><p class="set-info">Continue to sign in.</p>`})
-return Promise.resolve({body:`<p>Wait until the installer in ${connEsc(w.installedVia||"the terminal")} says it is done, then check again. LOYA NG looks in PATH and the folders the installer uses.</p>`,ok:"Check again"})
+const live=w.watchId?`<div class="conn-wiz-watch" aria-live="polite">${connWatchHtml(w.watch)}</div>`:""
+const os=w.osNote?`<p class="set-info">${connEsc(w.osNote)}</p>`:""
+if(v.done)return Promise.resolve({body:`<p class="conn-wiz-done">Found ${connEsc(st.label)}${st.version?" "+connEsc(st.version):""} at <code>${connEsc(st.path)}</code>.</p>${live}<p class="set-info">Continue to sign in.</p>`})
+return Promise.resolve({body:`<p>LOYA NG looks for ${connEsc(st.label)} in PATH and the folders the installer uses${w.watchId?", and goes on by itself as soon as it is found":""}. It does not wait for the installer in ${connEsc(w.installedVia||"the terminal")} to close.${w.watchId&&w.installedVia==="the LOYA NG terminal"?" Questions the installer asks show up here.":""}</p>${os}${live}`,ok:"Check again"})
 }
 if(v.step.id==="signin"){
 if(v.done)return already(st.signin.detail||"signed in")
