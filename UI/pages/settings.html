@@ -228,6 +228,25 @@
 <div class="set-status" id="setProfileStatus"></div>
 </div>
 <div class="set-box glass-panel">
+<div class="set-box-title">AI</div>
+<p class="set-info set-moved-note">The AI Assistant, Claude Agent, OpenAI Codex and connecting your own Claude Code / Codex CLI are now under <button type="button" class="set-link-btn" data-goto-ai="agents">AI &gt; Agents</button>.</p>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="ai">
+<div class="set-subtabs" role="tablist" aria-label="AI settings">
+<button type="button" class="set-subtab active" role="tab" aria-selected="true" data-ai-tab="agents">Agents</button>
+<button type="button" class="set-subtab" role="tab" aria-selected="false" data-ai-tab="roles">Roles</button>
+</div>
+<div class="set-subpanel active" data-ai-panel="agents" role="tabpanel">
+<div class="set-box glass-panel">
+<div class="set-box-title">Connections</div>
+<div id="setExtConnectionsRoot"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">External Agents</div>
+<div id="setExtAgentsRoot"></div>
+</div>
+<div class="set-box glass-panel">
 <div class="set-box-title">AI Assistant</div>
 <p class="set-info">A resizable side panel with a circular toggle in the bottom nav. Shown by default. Below you set up the providers the AI chat can use.</p>
 <div class="set-row"><label class="set-check"><input type="checkbox" id="setAiToggle"><span>Enable AI extension</span></label></div>
@@ -289,17 +308,8 @@
 <div class="set-row"><span class="set-status" id="setSemanticStatus"></span><button type="button" class="set-btn" id="setSemanticRebuildBtn">Rebuild Index</button></div>
 </div>
 </div>
-<div class="set-box glass-panel">
-<div class="set-box-title">External Agents</div>
-<p class="set-info set-moved-note">Claude Agent, OpenAI Codex and connecting your own Claude Code / Codex CLI are now under <button type="button" class="set-link-btn" data-goto-ai="agents">AI &gt; Agents</button>.</p>
 </div>
-</div>
-<div class="set-panel" data-tab-panel="ai">
-<div class="set-subtabs" role="tablist" aria-label="AI settings">
-<button type="button" class="set-subtab active" role="tab" aria-selected="true" data-ai-tab="roles">Roles</button>
-<button type="button" class="set-subtab" role="tab" aria-selected="false" data-ai-tab="agents">Agents</button>
-</div>
-<div class="set-subpanel active" data-ai-panel="roles" role="tabpanel">
+<div class="set-subpanel" data-ai-panel="roles" role="tabpanel">
 <div class="set-box glass-panel">
 <div class="set-box-title">AI Roles &amp; Permissions</div>
 <p class="set-info">Controls what the AI may do when it operates LOYA NG through its tools - in the AI panel, for External Agents (Claude Agent, OpenAI Codex) and for external MCP clients. Pick a role, or set each permission to Allow, Ask or Deny.</p>
@@ -311,16 +321,6 @@
 <div class="set-row"><label class="set-label" for="setAiTerminalApproval">When the AI asks to run a command</label><select id="setAiTerminalApproval" class="set-select"><option value="ask">Ask me every time (recommended)</option><option value="allow">Run without asking</option></select></div>
 <p class="set-info" id="setAiTerminalApprovalNote"></p>
 <div class="set-status" id="setAiRolesStatus"></div>
-</div>
-</div>
-<div class="set-subpanel" data-ai-panel="agents" role="tabpanel">
-<div class="set-box glass-panel">
-<div class="set-box-title">External Agents</div>
-<div id="setExtAgentsRoot"></div>
-</div>
-<div class="set-box glass-panel">
-<div class="set-box-title">Connections</div>
-<div id="setExtConnectionsRoot"></div>
 </div>
 </div>
 </div>

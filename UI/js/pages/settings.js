@@ -9,7 +9,7 @@ if(tab==="airoles")tab="ai"  // the old "AI Roles" tab is now AI > Roles
 setState.tab=tab
 document.querySelectorAll(".set-tab").forEach((t)=>t.classList.toggle("active",t.dataset.tab===tab))
 document.querySelectorAll(".set-panel").forEach((p)=>p.classList.toggle("active",p.dataset.tabPanel===tab))
-if(tab==="ai"&&sub)setSwitchAiTab(sub)
+if(tab==="ai")setSwitchAiTab(sub||setState.aiTab||"agents")
 setRefreshTabData(tab)
 }
 function setRefreshTabData(tab){
@@ -20,9 +20,9 @@ else if(tab==="backup")setRefreshBackups().catch(()=>{})
 else if(tab==="update")setLoadUpdate()
 else if(tab==="cve"&&typeof cveMountSettings==="function")cveMountSettings(document.getElementById("setCveRoot"))
 }
-// Settings > AI: Roles (AI Roles & Permissions) and Agents (Claude Agent / OpenAI Codex, and Connections to your own CLI).
+// Settings > AI: Agents (default: Connections to your own CLI, Claude Agent / OpenAI Codex, AI Assistant) and Roles (AI Roles & Permissions).
 function setSwitchAiTab(sub){
-sub=sub==="agents"?"agents":"roles"
+sub=sub==="roles"?"roles":"agents"
 setState.aiTab=sub
 document.querySelectorAll(".set-subtab[data-ai-tab]").forEach((b)=>{const on=b.dataset.aiTab===sub;b.classList.toggle("active",on);b.setAttribute("aria-selected",on?"true":"false")})
 document.querySelectorAll(".set-subpanel[data-ai-panel]").forEach((p)=>p.classList.toggle("active",p.dataset.aiPanel===sub))
@@ -1549,7 +1549,6 @@ setLoadExtensions()
 setLoadAiProviders()
 setLoadAiRoles()
 if(typeof extAgentsMountSettings==="function")extAgentsMountSettings(document.getElementById("setExtAgentsRoot"))
-if(setState.aiTab==="agents")setSwitchAiTab("agents")
 if(typeof cveMountSettings==="function")cveMountSettings(document.getElementById("setCveRoot"))
 if(typeof tshMountSettings==="function")tshMountSettings(document.getElementById("setTermShellsRoot"))
 setLoadAppearance()
