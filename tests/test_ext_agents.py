@@ -8,6 +8,9 @@ from Cores.Services import ext_agents_service as ext
 from Cores.Services import mcp_local_service as mcp
 from Cores.Services import security_service as security
 from Cores.Services import ext_agent_claude_runner as runner
+# The MCP tool modules register their AI Roles permissions on import. In the app they are imported at startup, before any
+# consent; import them here too, so a run does not register new permissions after consent and look like a widening.
+from Cores.Bridge import mcp_app_tools,mcp_chain_history_tools,mcp_flow_tools  # noqa: F401
 CLAUDE_KEY="sk-ant-api03-TESTKEY-0123456789abcdefWXYZ"
 CODEX_KEY="sk-proj-TESTKEY-0123456789abcdefQRST"
 STUB_CLAUDE=r'''

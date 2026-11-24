@@ -764,8 +764,7 @@ def enter_for(session_id):
     Enter key, as the panel's full terminal mode sends it), CRLF for the Windows pipe backend (same as termSubmitNewline)."""
     ts=_ts()
     try:
-        sess=getattr(ts,"_sessions",{}).get(session_id)
-        backend=ts.session_backend(sess) if sess is not None else ""
+        backend=ts.session_backend_of(session_id) or ""
     except Exception:backend=""
     if backend in ("pty","conpty"):return "\r"
     if backend:return "\r\n"

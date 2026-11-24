@@ -196,10 +196,10 @@ let p
 if(plan.via!=="loya")p=viaOs()
 else p=bridgeCall("extAgents.cli_launch_command",[tool,plan.shell]).then((r)=>{
 if(!r||!r.line)return viaOs()
-return termOpenForRun().then(()=>termNewTab(plan.shell,{name:r.name||k.label,cwd:r.cwd,startup:r.line})).then((id)=>{
+return termOpenForRun().then(()=>termNewTab(plan.shell,{name:r.name||k.label,cwd:r.cwd,startup:r.line,rawInput:true})).then((id)=>{
 cliState.tabs[tool]=id
 cliState.via[tool]="loya"
-// The CLI is interactive: lines typed in this tab go to it as typed (terminal.js skips its job markers for rawInput tabs).
+// The CLI is a full-screen program: its tab is in full terminal mode (terminal-emu.js, xterm) for good, keys go to it raw.
 const tab=typeof termFindTab==="function"?termFindTab(id):null
 if(tab)tab.rawInput=true
 cliStatus("Opened "+k.name+" in a LOYA NG terminal tab. Talk to it there.",false)
@@ -222,6 +222,13 @@ const k=CLI_ENTRY_KINDS[cliKindOf(tool)]
 if(cliTabAlive(tool)){
 return termOpenForRun().then(()=>{
 termActivateTab(cliState.tabs[tool])
+const tab=typeof termFindTab==="function"?termFindTab(cliState.tabs[tool]):null
+if(tab&&typeof termEmuOn==="function"&&termEmuOn(tab)){
+termEmuPaste(tab,starter.text)
+termEmuFocus(tab)
+cliStatus("Typed into the "+k.name+" tab. Press Enter there to send it.",false)
+return
+}
 const input=document.getElementById("terminalInput")
 if(!input)return
 input.value=starter.text

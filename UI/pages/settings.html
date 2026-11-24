@@ -204,6 +204,8 @@
 <div class="set-row"><span>Confirm command runs</span><select id="setCmdRunConfirm" class="set-select"><option value="always">Always</option><option value="risky">Only risky commands</option><option value="never">Never</option></select></div>
 <div class="set-row"><span>Send runs to</span><select id="setRunDestination" class="set-select"><option value="active">The active session</option><option value="new">A new session each time</option><option value="pick">Ask which session</option></select></div>
 <div class="set-row"><label class="set-check"><input type="checkbox" id="setTermPasteConfirm"><span>Confirm before pasting multiple lines into the terminal</span></label></div>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setTermFullDefault"><span>Use full terminal mode for all new sessions</span></label></div>
+<p class="set-info">Full terminal mode is a real terminal emulator: full-screen programs such as vim, htop, less, ssh and AI CLIs draw and take keys as in a desktop terminal, but there are no command blocks or job tracking. Any tab can be switched from its tab menu or the right-click Session menu. Claude Code and Codex CLI tabs always use it.</p>
 <p class="set-info">A command counts as risky when it is marked destructive, still contains unresolved {PLACEHOLDER} values, asks for elevation, or matches a known destructive pattern.</p>
 <div class="set-status" id="setRunBehaviourStatus"></div>
 </div>

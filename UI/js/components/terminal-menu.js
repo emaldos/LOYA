@@ -50,9 +50,12 @@ let left=parent.right-2
 if(left+w>vw-m)left=parent.left-w+2
 return termCtxClamp(left,row.top-6,w,h,vw,vh,m)
 }
-// ctx: {selection, target, hasSession, dead, jobRunning, layout, mode, maximized, fontSize, closedCount, canNote, canCve, canSearch, canOpenUrl, canSplit, canRecord}
+// ctx: {selection, target, hasSession, dead, jobRunning, layout, mode, maximized, fontSize, closedCount, canNote, canCve, canSearch, canOpenUrl, canSplit, canRecord, emulator, emuLocked}
+// emulator: the tab runs in full terminal mode (xterm). Ctrl+F and Ctrl+L go to the program there, so those rows drop
+// their key hints; there are no job blocks, so Interrupt is offered whenever the session is live.
 function termCtxBuildItems(ctx){
 const c=ctx||{}
+const emu=!!c.emulator
 const sel=String(c.selection||"")
 const has=!!sel.trim()
 const live=!!c.hasSession&&!c.dead
@@ -62,11 +65,11 @@ const items=[
 {id:"copy_all",label:"Copy all output",icon:"copy",disabled:!c.hasOutput},
 {id:"paste",label:"Paste",icon:"paste",key:"Ctrl+Shift+V",disabled:!live},
 {id:"paste_line",label:"Paste as one line",icon:"paste",disabled:!live},
-{id:"select_all",label:"Select all",icon:"text",disabled:!c.hasOutput},
+{id:"select_all",label:"Select all",icon:"text",disabled:emu?!c.hasSession:!c.hasOutput},
 {sep:true},
-{id:"find",label:has&&sel.length<=200&&!/[\r\n]/.test(sel.trim())?"Find selection":"Find",icon:"search",key:"Ctrl+F"},
-{id:"clear",label:"Clear",icon:"eraser",key:"Ctrl+L",disabled:!c.hasSession},
-{id:"interrupt",label:"Interrupt",icon:"stop",key:"Ctrl+C",disabled:!live||!c.jobRunning}
+{id:"find",label:has&&sel.length<=200&&!/[\r\n]/.test(sel.trim())?"Find selection":"Find",icon:"search",key:emu?"":"Ctrl+F"},
+{id:"clear",label:"Clear",icon:"eraser",key:emu?"":"Ctrl+L",disabled:!c.hasSession},
+{id:"interrupt",label:"Interrupt",icon:"stop",key:"Ctrl+C",disabled:!live||(!emu&&!c.jobRunning)}
 ]
 const useItems=[]
 if(use.url&&c.canOpenUrl)useItems.push({id:"open_url",label:"Open link",icon:"link",value:use.url})
@@ -80,6 +83,7 @@ const session=[
 {id:"new_pick",label:"New session with...",icon:"command-line"},
 {id:"duplicate",label:"Duplicate session",icon:"copy",disabled:!c.hasSession},
 {id:"rename",label:"Rename session",icon:"edit",disabled:!c.hasSession},
+{id:"full_terminal",label:"Full terminal mode",icon:"command-line",checkbox:true,checked:emu,disabled:!c.hasSession||!!c.emuLocked||c.canEmulate===false},
 {sep:true},
 single?{id:"split",label:"Split side by side",icon:"flow-split",disabled:!c.canSplit}:{id:"unsplit",label:"Single pane",icon:"flow-split"},
 {id:"split_pick",label:"Split layout...",icon:"table",disabled:!c.canSplit},
@@ -121,6 +125,16 @@ let termCtx={menus:[],opened:null,hoverTimer:null}
 function termCtxEsc(s){
 return String(s===undefined||s===null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")
 }
+// Full terminal mode (terminal-emu.js). Every hook is optional: without it the tab is in the line view.
+function termCtxEmu(tab){
+return !!tab&&typeof termEmuOn==="function"&&!!termEmuOn(tab)
+}
+// Puts the caret back where the user types: the xterm in full terminal mode, otherwise the input line.
+function termCtxRefocus(tab){
+if(termCtxEmu(tab)&&typeof termEmuFocus==="function"){termEmuFocus(tab);return}
+const input=document.getElementById("terminalInput")
+if(input&&termState.open)input.focus()
+}
 function termCtxFontSize(){
 return termState.fontSize||TERM_CTX_FONT_DEFAULT
 }
@@ -130,6 +144,7 @@ const panel=document.getElementById("terminalPanel")
 if(panel)panel.style.setProperty("--term-font-size",termState.fontSize+"px")
 if(typeof termScheduleSizeSync==="function")termScheduleSizeSync()
 if(save)bridgeCall("terminal.set_panel_layout",[{font_size:termState.fontSize}]).catch(()=>{})
+if(typeof termEmuApplyFont==="function")termEmuApplyFont()
 }
 // Copy: the async clipboard first (works in WebView2 and WebKitGTK on 127.0.0.1); if it is refused, a hidden
 // textarea + execCommand("copy"), which pywebview allows on GTK (javascript_can_access_clipboard).
@@ -177,7 +192,9 @@ return viaAsync().catch(()=>got===null?Promise.reject(new Error("no clipboard"))
 }
 return viaAsync().catch(()=>{const got=viaField();return got===null?Promise.reject(new Error("no clipboard")):got})
 }
-function termCtxPaste(oneLine){
+function termCtxPaste(oneLine,tab){
+if(tab===undefined&&typeof termFindTab==="function")tab=termFindTab(termState.activeId)
+if(termCtxEmu(tab)){termCtxEmuPaste(oneLine,tab);return}
 const input=document.getElementById("terminalInput")
 termCtxReadClipboard().then((text)=>{
 if(input)input.focus()
@@ -187,11 +204,26 @@ if(!termState.confirmMultilinePaste||!/[\r\n]/.test(text.trim())){termInsertAtCu
 termConfirmMultilinePaste(text)
 }).catch(()=>{if(input)input.focus();showToast("Could not read the clipboard - use Ctrl+V","error")})
 }
+// Full terminal mode: the text goes to the program through xterm's paste (bracketed paste when the program asked for it).
+// A multi-line paste asks first, the same as in the line view, since a plain shell still runs each line.
+function termCtxEmuPaste(oneLine,tab){
+const back=()=>termCtxRefocus(tab)
+const send=(text)=>{if(typeof termEmuPaste==="function")termEmuPaste(tab,text);back()}
+termCtxReadClipboard().then((text)=>{
+if(!text){back();return}
+if(oneLine){send(termCtxOneLine(text));return}
+if(!termState.confirmMultilinePaste||!/[\r\n]/.test(text.trim())||typeof appConfirm!=="function"){send(text);return}
+const count=text.split(/\r?\n/).length
+const body=typeof termPastePreviewHtml==="function"?termPastePreviewHtml(text):""
+appConfirm("Paste "+count+" lines into the terminal?",{okLabel:"Paste",cancelLabel:"Cancel",wide:true,danger:true,bodyHtml:body}).then((ok)=>{if(ok)send(text);else back()})
+}).catch(()=>{back();showToast("Could not read the clipboard - use Ctrl+V","error")})
+}
 function termCtxPaneAt(target){
 const el=target&&target.closest?target.closest(".terminal-pane"):null
 return termState.panes.find((p)=>p.el===el)||termFocusedPane()
 }
-function termCtxSelectAll(pane){
+function termCtxSelectAll(pane,tab){
+if(termCtxEmu(tab)){if(typeof termEmuSelectAll==="function")termEmuSelectAll(tab);return}
 pane=pane||termFocusedPane()
 if(!pane||!pane.out)return
 const range=document.createRange()
@@ -201,11 +233,13 @@ sel.removeAllRanges()
 sel.addRange(range)
 }
 function termCtxPlainBuffer(tab){
+if(termCtxEmu(tab)&&typeof termEmuText==="function")return termEmuText(tab)
 if(!tab||!tab.buffer)return ""
 const text=typeof termStripJobMarkers==="function"?termStripJobMarkers(tab.buffer,tab.shellId):tab.buffer
 return termCtxStripAnsi(text).replace(/\s+$/,"")
 }
-function termCtxFind(selection){
+// Full terminal mode shares the search bar; the query runs through xterm's search addon instead of the line view's matcher.
+function termCtxFind(selection,tab){
 const one=String(selection||"").trim()
 termOpenSearch()
 if(one&&one.length<=200&&!/[\r\n]/.test(one)){
@@ -213,7 +247,8 @@ const input=document.getElementById("terminalSearchInput")
 input.value=one
 termState.searchQuery=one
 termState.searchIndex=0
-termRunSearch()
+if(termCtxEmu(tab)){if(typeof termEmuFind==="function")termEmuFind(tab,one)}
+else termRunSearch()
 input.select()
 }
 }
@@ -236,16 +271,21 @@ input.focus()
 }
 function termCtxRun(id,item,info){
 const tab=info.tab
+const emu=termCtxEmu(tab)
 const fail=(err)=>showToast(err&&err.message?err.message:"Something went wrong","error")
 const actions={
-copy:()=>termCtxCopyText(info.selection),
+copy:()=>termCtxCopyText(emu&&typeof termEmuSelection==="function"?termEmuSelection(tab):info.selection),
 copy_all:()=>termCtxCopyText(termCtxPlainBuffer(tab),"Copied all output"),
-paste:()=>termCtxPaste(false),
-paste_line:()=>termCtxPaste(true),
-select_all:()=>termCtxSelectAll(info.pane),
-find:()=>termCtxFind(info.selection),
-clear:()=>termClearOutput(),
-interrupt:()=>{termSendControl(TERM_SHELL_CONTROL_KEYS.c);termClearStagedInput()},
+paste:()=>termCtxPaste(false,tab),
+paste_line:()=>termCtxPaste(true,tab),
+select_all:()=>termCtxSelectAll(info.pane,tab),
+find:()=>termCtxFind(info.selection,tab),
+clear:()=>{if(emu){if(typeof termEmuClear==="function")termEmuClear(tab)}else termClearOutput()},
+interrupt:()=>{termSendControl(TERM_SHELL_CONTROL_KEYS.c);if(!emu)termClearStagedInput()},
+full_terminal:()=>{
+if(!tab||typeof termEmuSetMode!=="function")return
+Promise.resolve(termEmuSetMode(tab,!emu)).then(()=>termCtxRefocus(tab)).catch((err)=>{fail(err);termCtxRefocus(tab)})
+},
 open_url:()=>bridgeCall("notes.open_url",[item.value]).catch((err)=>showToast(err&&err.message?err.message:"Could not open the link","error")),
 cve:()=>Promise.resolve(cveOpenDetail(item.value)).catch(fail),
 search_loya:()=>termCtxSearchLoya(item.value),
@@ -271,22 +311,27 @@ maximize:()=>termToggleMaximize()
 const fn=actions[id]
 if(!fn)return
 // Actions that put the caret back in the terminal: everything except those that open their own UI.
-const keepsFocus=/^(find|note|search_loya|cve|open_url|rename|new_pick|split_pick|send_session|close|paste|paste_line|select_all)$/.test(id)
+// full_terminal refocuses itself once the mode switch settles. In full terminal mode Select all keeps the xterm focused.
+const keepsFocus=/^(find|note|search_loya|cve|open_url|rename|new_pick|split_pick|send_session|close|paste|paste_line|select_all|full_terminal)$/.test(id)
 try{fn()}catch(err){console.error("terminal menu action failed",id,err)}
-if(!keepsFocus){const input=document.getElementById("terminalInput");if(input&&termState.open)input.focus()}
+if(!keepsFocus||(emu&&id==="select_all"))termCtxRefocus(tab)
 }
 function termCtxContext(info){
 const tab=info.tab
+const emu=termCtxEmu(tab)
 return {
-selection:info.selection,target:info.target,
-hasSession:!!tab,dead:!!(tab&&tab.dead),jobRunning:!!(tab&&tab.activeJob),hasOutput:!!(tab&&tab.buffer&&tab.buffer.trim()),
+selection:emu&&typeof termEmuSelection==="function"?String(termEmuSelection(tab)||""):info.selection,target:info.target,
+emulator:emu,emuLocked:emu&&typeof termEmuLocked==="function"&&!!termEmuLocked(tab),
+hasSession:!!tab,dead:!!(tab&&tab.dead),jobRunning:!!(tab&&tab.activeJob),hasOutput:emu?true:!!(tab&&tab.buffer&&tab.buffer.trim()),
 layout:termState.layout,mode:termState.mode,maximized:!!termState.maximized,fontSize:termCtxFontSize(),
 closedCount:(termState.closed||[]).length,
 canNote:typeof termOpenNotePicker==="function",canCve:typeof cveOpenDetail==="function",canSearch:typeof paletteOpen==="function",
-canOpenUrl:typeof bridgeCall==="function",canSplit:!!tab&&typeof termSetLayout==="function"
+canOpenUrl:typeof bridgeCall==="function",canSplit:!!tab&&typeof termSetLayout==="function",
+canEmulate:typeof termEmuSetMode==="function"
 }
 }
 function termCtxClose(refocus){
+const tab=termCtx.menus[0]&&termCtx.menus[0].info?termCtx.menus[0].info.tab:null
 if(termCtx.hoverTimer){clearTimeout(termCtx.hoverTimer);termCtx.hoverTimer=null}
 termCtx.menus.forEach((m)=>m.el.remove())
 termCtx.menus=[]
@@ -294,7 +339,7 @@ document.removeEventListener("mousedown",termCtxOutside,true)
 document.removeEventListener("keydown",termCtxKeydown,true)
 window.removeEventListener("blur",termCtxOnBlur)
 window.removeEventListener("resize",termCtxOnBlur)
-if(refocus){const input=document.getElementById("terminalInput");if(input&&termState.open)input.focus()}
+if(refocus)termCtxRefocus(tab)
 }
 function termCtxOutside(e){
 if(termCtx.menus.some((m)=>m.el.contains(e.target)))return
@@ -331,7 +376,7 @@ b.type="button"
 b.tabIndex=-1
 b.id="termCtxRow"+(level||0)+"_"+menu.rowItems.length
 b.className="app-context-menu-item"+(it.danger?" danger":"")+(it.submenu?" term-ctx-has-sub":"")
-b.setAttribute("role",it.checked!==undefined?"menuitemradio":"menuitem")
+b.setAttribute("role",it.checkbox?"menuitemcheckbox":it.checked!==undefined?"menuitemradio":"menuitem")
 if(it.checked!==undefined)b.setAttribute("aria-checked",it.checked?"true":"false")
 if(it.submenu)b.setAttribute("aria-haspopup","menu")
 b.disabled=!!it.disabled
@@ -443,19 +488,30 @@ if(fromKeyboard)termCtxFocusRow(menu,first)
 document.addEventListener("keydown",termCtxKeydown,true)
 setTimeout(()=>{document.addEventListener("mousedown",termCtxOutside,true);window.addEventListener("blur",termCtxOnBlur);window.addEventListener("resize",termCtxOnBlur)},0)
 }
+// Full terminal mode: xterm's DOM (its hidden helper textarea included) sits inside the pane output. termCtxWire also
+// listens in the capture phase so the menu opens before xterm's own contextmenu handling, and the bubble pass skips it.
+function termCtxInEmu(target){
+return !!(target&&target.closest&&target.closest(".terminal-pane .xterm"))
+}
+function termCtxOnEmuContextMenu(e){
+if(!termCtxInEmu(e.target))return
+termCtxOnContextMenu(e)
+}
 function termCtxOnContextMenu(e){
 if(e.shiftKey)return
 const panes=document.getElementById("terminalPanes")
 if(!panes||!panes.contains(e.target))return
-if(e.target.closest(".terminal-pane-head,.terminal-pane-empty,input,textarea,select"))return
+const inEmu=termCtxInEmu(e.target)
+if(inEmu&&e.eventPhase!==Event.CAPTURING_PHASE)return
+if(!inEmu&&e.target.closest(".terminal-pane-head,.terminal-pane-empty,input,textarea,select"))return
 e.preventDefault()
 e.stopPropagation()
 const pane=termCtxPaneAt(e.target)
 const idx=termState.panes.indexOf(pane)
 if(idx>=0&&idx!==termState.focusPane)termFocusPane(idx,{noInput:true})
 const tab=termFindTab(pane&&pane.sessionId?pane.sessionId:termState.activeId)
-const ioc=e.target.closest(".term-ioc")
-const info={pane,tab,selection:termOutputSelectionText(),target:ioc?ioc.dataset.value||ioc.textContent:""}
+const ioc=inEmu?null:e.target.closest(".term-ioc")
+const info={pane,tab,selection:termCtxEmu(tab)&&typeof termEmuSelection==="function"?String(termEmuSelection(tab)||""):termOutputSelectionText(),target:ioc?ioc.dataset.value||ioc.textContent:""}
 const fromKeyboard=e.button!==2&&e.clientX===0&&e.clientY===0
 let x=e.clientX,y=e.clientY
 if(fromKeyboard&&pane&&pane.out){const r=pane.out.getBoundingClientRect();x=r.left+24;y=r.top+24}
@@ -474,6 +530,7 @@ const panes=document.getElementById("terminalPanes")
 if(!panes||panes.dataset.ctxWired)return
 panes.dataset.ctxWired="1"
 panes.addEventListener("contextmenu",termCtxOnContextMenu)
+panes.addEventListener("contextmenu",termCtxOnEmuContextMenu,true)
 const input=document.getElementById("terminalInput")
 if(input)input.addEventListener("contextmenu",termCtxOnInputContextMenu)
 bridgeCall("terminal.get_settings").then((s)=>{if(s&&s.font_size)termCtxApplyFont(s.font_size,false)}).catch(()=>{})

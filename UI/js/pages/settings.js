@@ -262,9 +262,11 @@ const el=document.getElementById(id)
 if(el&&s[SET_RUN_BEHAVIOUR_FIELDS[id]])el.value=s[SET_RUN_BEHAVIOUR_FIELDS[id]]
 })
 document.getElementById("setTermPasteConfirm").checked=s.confirm_multiline_paste!==false
+const fullDefault=document.getElementById("setTermFullDefault")
+if(fullDefault)fullDefault.checked=!!s.full_terminal_default
 }
 function setDoSaveRunBehaviour(){
-const values={confirm_multiline_paste:document.getElementById("setTermPasteConfirm").checked,use_conpty:document.getElementById("setTermConpty").checked}
+const values={confirm_multiline_paste:document.getElementById("setTermPasteConfirm").checked,use_conpty:document.getElementById("setTermConpty").checked,full_terminal_default:!!(document.getElementById("setTermFullDefault")||{}).checked}
 Object.keys(SET_RUN_BEHAVIOUR_FIELDS).forEach((id)=>{values[SET_RUN_BEHAVIOUR_FIELDS[id]]=document.getElementById(id).value})
 bridgeCall("terminal.set_run_behaviour",[values]).then((s)=>{
 setApplyRunBehaviour(s)
@@ -1501,6 +1503,7 @@ document.getElementById("setProfileEnv").value=setFormatEnv(profile.env)
 })
 Object.keys(SET_RUN_BEHAVIOUR_FIELDS).forEach((id)=>document.getElementById(id).addEventListener("change",setDoSaveRunBehaviour))
 document.getElementById("setTermPasteConfirm").addEventListener("change",setDoSaveRunBehaviour)
+document.getElementById("setTermFullDefault").addEventListener("change",setDoSaveRunBehaviour)
 document.getElementById("setTermConpty").addEventListener("change",setDoSaveRunBehaviour)
 document.getElementById("setTermSuggest").addEventListener("change",(e)=>termSetSuggestEnabled(e.target.checked,false).then((s)=>setStatus("setTermShortcutStatus",s?"Saved.":"Failed",!s)))
 const setShortcutWrap=document.getElementById("setTermShortcuts")

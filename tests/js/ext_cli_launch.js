@@ -56,7 +56,7 @@ check("shell picked with connPickShell (pwsh, powershell, cmd on Windows)",/conn
 check("not ready links to Settings > AI > Agents",/setSwitchTab\("ai","agents"\)/.test(source)&&/goToPage\("settings"\)/.test(source))
 check("uses the Connections background job, never a blocking status call",/connJobRun\(bridgeCall,"overview",null\)/.test(source)&&!/extAgents\.connection_status"/.test(source)&&!/extAgents\.connections"/.test(source))
 check("bridge calls",/extAgents\.cli_launch_command/.test(source)&&/extAgents\.cli_launch_os/.test(source))
-check("opens a LOYA terminal tab in the workspace",/termNewTab\(plan\.shell,\{name:r\.name\|\|k\.label,cwd:r\.cwd,startup:r\.line\}\)/.test(source))
+check("opens a LOYA terminal tab in the workspace, in full terminal mode",/termNewTab\(plan\.shell,\{name:r\.name\|\|k\.label,cwd:r\.cwd,startup:r\.line,rawInput:true\}\)/.test(source))
 // ---- starters: typed into the CLI tab's input box, never sent
 eq("starters",api.CLI_STARTERS.map((s)=>s.text)[0],"Use the loya-basics skill")
 const starter=source.slice(source.indexOf("function cliStarter"),source.indexOf("function cliRefuseChat"))
@@ -66,7 +66,7 @@ check("no terminal.write anywhere in the CLI entry",!/terminal\.write/.test(sour
 check("CLI tab is marked rawInput",/if\(tab\)tab\.rawInput=true/.test(source))
 const termJs=read("UI","js","components","terminal.js")
 const submit=termJs.slice(termJs.indexOf("function termSubmitCommand("),termJs.indexOf("\nfunction ",termJs.indexOf("function termSubmitCommand(")+1))
-check("terminal: a rawInput tab gets the line as typed plus CR, no job markers",/if\(tab&&tab\.rawInput\)\{bridgeCall\("terminal\.write",\[termState\.activeId,val\+"\\r"\]\)[^\n]*return\}/.test(submit)&&submit.indexOf("tab.rawInput")<submit.indexOf("termJobPayload"))
+check("terminal: a rawInput or full terminal tab gets the line as typed plus CR, no job markers",/if\(tab&&\(tab\.rawInput\|\|tab\.emulator\)\)\{bridgeCall\("terminal\.write",\[termState\.activeId,val\+"\\r"\]\)[^\n]*return\}/.test(submit)&&submit.indexOf("tab.rawInput")<submit.indexOf("termJobPayload"))
 check("no run_start / chat stream to the CLI",!/run_start|chat_send_stream|extAgents\.run_/.test(source))
 const code=source.split("\n").filter((l)=>!/^\s*\/\//.test(l)).join("\n")
 check("no non-interactive CLI invocation (-p / --print / exec) in the UI",!/["'`\s]-p["'`\s]|--print|["'`\s]exec["'`\s]/.test(code)&&code.length>5000)

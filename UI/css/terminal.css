@@ -362,3 +362,13 @@ body.term-split-y,body.term-split-y *{cursor:row-resize!important}
 .term-ctx-key{flex:0 0 auto;margin-left:14px;font-family:var(--font-ui);font-size:10.5px;color:var(--text-dim);background:transparent;border:none;padding:0}
 .term-ctx-menu .icon.term-ctx-caret,.term-ctx-menu .icon.term-ctx-check{width:12px;height:12px;margin-left:10px;opacity:0.75}
 .term-ctx-menu .app-context-menu-item.danger .term-ctx-key{color:inherit}
+/* Full terminal mode (terminal-emu.js): the pane output hosts an xterm.js terminal instead of the line view. */
+.terminal-output.term-emu{padding:6px 4px 2px 10px;overflow:hidden;white-space:normal;word-break:normal;line-height:normal;cursor:default;display:flex;flex-direction:column}
+.terminal-output.term-emu>:not(.terminal-emu-host){display:none!important}
+.terminal-emu-host{flex:1;min-height:0;min-width:0;position:relative}
+.terminal-emu-host .xterm{height:100%;padding:0}
+.terminal-emu-host .xterm .xterm-viewport{background-color:transparent!important;scrollbar-width:thin}
+.terminal-emu-host .xterm .xterm-viewport::-webkit-scrollbar{width:8px}
+.terminal-emu-host .xterm .xterm-viewport::-webkit-scrollbar-thumb{background:var(--pal-scroll-handle,rgba(127,127,127,0.4));border-radius:4px}
+.terminal-emu-host .xterm.focus,.terminal-emu-host .xterm:focus{outline:none}
+.terminal-panel.term-emu-active .terminal-input-row,.terminal-panel.term-emu-active #terminalBlocksBtn{display:none}

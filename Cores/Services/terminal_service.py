@@ -183,9 +183,13 @@ def _clean_size(cols,rows):
     if cols<20 or rows<5 or cols>1000 or rows>500:return None
     return (cols,rows)
 class TerminalSession:
-    def __init__(self,shell_id,command=None,cwd="",env=None,size=None,prefer_conpty=False):
+    def __init__(self,shell_id,command=None,cwd="",env=None,size=None,prefer_conpty=False,raw=False):
         self.id=uuid.uuid4().hex[:12]
         self._prefer_conpty=bool(prefer_conpty)
+        # Raw (emulator) mode: the panel is an xterm.js terminal that answers cursor queries itself and draws every repaint,
+        # so the Linux line-edit collapse and the DSR auto-answer are skipped. Checked per chunk, so it can be toggled live.
+        self.raw=bool(raw)
+        self._edit_lock=threading.Lock()
         # PowerShell on Linux repaints the input line with "cursor to row N, column 1" on every key; the panel is line based,
         # so that becomes a carriage return (overwrite the current line), which it already renders.
         self._line_redraw_to_cr=not _IS_WINDOWS and shell_id=="pwsh" and command is None
@@ -203,13 +207,14 @@ class TerminalSession:
         self.elevated=False
         self.label=""
         self._initial_size=_clean_size(*size) if size else None
-        self.cols=self._initial_size[0] if self._initial_size else 0
+        self.cols,self.rows=self._initial_size or (0,0)
         self._start(command or _shell_command(shell_id),cwd,env)
     def _try_conpty(self,cmd,workdir,environment):
         module=_conpty()
         if module is None:return False
         try:
-            session=module.ConptySession(cmd,120,30,workdir,environment)
+            cols,rows=self._initial_size or (120,30)
+            session=module.ConptySession(cmd,cols,rows,workdir,environment)
         except Exception:
             return False
         time.sleep(_CONPTY_PROBE_SECONDS)
@@ -246,10 +251,13 @@ class TerminalSession:
         # The raw bytes of the line the cursor is on (the prompt, before input), capped.
         cut=chunk.rfind(b"\n")
         self._last_line=(chunk[cut+1:] if cut>=0 else self._last_line+chunk)[-4096:]
+    def _dsr_rows(self):
+        # The current grid height (kept by resize), else the size the session started with.
+        return getattr(self,"rows",0) or (self._initial_size or (0,24))[1] or 24
     def _answer_cursor_query(self,chunk):
         # PowerShell (and some TUIs) ask "where is the cursor?" (ESC[6n) and block until a terminal answers. LOYA's panel is not a
         # full VT, so answer for it: the last row, and the column right after the text already on the current line (the prompt).
-        rows=(self._initial_size or (0,24))[1] or 24
+        rows=self._dsr_rows()
         head=chunk[:chunk.find(_DSR_QUERY)]
         cut=head.rfind(b"\n")
         line=head[cut+1:] if cut>=0 else self._last_line+head
@@ -277,7 +285,7 @@ class TerminalSession:
         asked=line.count(_DSR_QUERY)
         if asked:
             line=line.replace(_DSR_QUERY,b"")
-            rows=(self._initial_size or (0,24))[1] or 24
+            rows=self._dsr_rows()
             for _ in range(asked):
                 try:os.write(self._master_fd,b"\x1b[%d;1R"%rows)
                 except OSError:break
@@ -289,6 +297,25 @@ class TerminalSession:
         parts=[p for p in _CUP_RE.split(line)[::3] if _ANSI_ANY_RE.sub(b"",p).strip()]
         typed=parts[-1] if parts else b""
         return typed+self._collapse_line_edit(rest) if rest else typed
+    def _filter_and_append(self,chunk):
+        # Linux pty output. Raw mode passes it through untouched (and releases a line held from before the switch).
+        if self.raw:
+            if self._edit_buf:chunk=self._edit_buf+chunk
+            self._edit_buf=None
+        else:
+            if self._line_redraw_to_cr:chunk=self._collapse_line_edit(chunk)
+            if _DSR_QUERY in chunk:self._answer_cursor_query(chunk)
+        if not chunk:return
+        self._track_line(chunk)
+        self._append(chunk)
+    def set_raw(self,on):
+        with self._edit_lock:
+            self.raw=bool(on)
+            if self.raw and self._edit_buf:
+                held=self._edit_buf;self._edit_buf=None
+                self._track_line(held);self._append(held)
+            elif self.raw:self._edit_buf=None
+        return self.raw
     def _append(self,chunk):
         with self._buf_lock:
             self._buf.extend(chunk)
@@ -316,11 +343,7 @@ class TerminalSession:
                     try:chunk=os.read(self._master_fd,_READ_CHUNK)
                     except OSError:break
                     if not chunk:break
-                    if self._line_redraw_to_cr:chunk=self._collapse_line_edit(chunk)
-                    if _DSR_QUERY in chunk:self._answer_cursor_query(chunk)
-                    if not chunk:continue
-                    self._track_line(chunk)
-                    self._append(chunk)
+                    with self._edit_lock:self._filter_and_append(chunk)
         except Exception:pass
         finally:self._closed=True
     def write(self,data):
@@ -338,8 +361,10 @@ class TerminalSession:
             self._buf.clear()
         return self._decoder.decode(data)
     def resize(self,cols,rows):
-        try:self.cols=int(cols)
-        except (TypeError,ValueError):pass
+        size=_clean_size(cols,rows)
+        if size is None:return False
+        cols,rows=size
+        self.cols,self.rows=size
         if self._pty is not None:return self._pty.resize(cols,rows)
         if _IS_WINDOWS or self._master_fd is None:return False
         try:
@@ -468,6 +493,8 @@ class ElevatedSession:
         self.id=uuid.uuid4().hex[:12]
         self.shell_id=shell_id
         self.label=""
+        self.raw=False
+        self.backend="elevated"
         self._buf=bytearray()
         self._buf_lock=threading.Lock()
         self._decoder=codecs.getincrementaldecoder("utf-8")("replace")
@@ -534,7 +561,7 @@ def _startup_payload(shell_id,text):
     if not lines:return ""
     newline="\r\n" if _IS_WINDOWS and not str(shell_id or "").startswith(_WSL_PREFIX) else "\n"
     return newline.join(lines)+newline
-def create_session(shell_id=None,profile_id=None,cols=0,rows=0,cwd="",startup="",label=""):
+def create_session(shell_id=None,profile_id=None,cols=0,rows=0,cwd="",startup="",label="",emulator=False):
     # cwd and startup come from saved or reopened sessions and override / extend the profile's own.
     profile=get_profile(profile_id) if profile_id else None
     if profile and profile.get("shell_id"):shell_id=profile["shell_id"]
@@ -542,7 +569,8 @@ def create_session(shell_id=None,profile_id=None,cols=0,rows=0,cwd="",startup=""
     ids={s["id"] for s in shells}
     if shell_id not in ids:shell_id=shells[0]["id"]
     workdir=_expand_cwd(cwd) or _expand_cwd((profile or {}).get("cwd",""))
-    sess=TerminalSession(shell_id,None,workdir,(profile or {}).get("env"),(cols,rows))
+    # An emulator (xterm.js) session hosts full-screen TUIs; the Windows pipe backend cannot, so it asks for ConPTY like task sessions.
+    sess=TerminalSession(shell_id,None,workdir,(profile or {}).get("env"),(cols,rows),prefer_conpty=bool(emulator),raw=bool(emulator))
     sess.label=str(label or "")[:60]
     with _lock:_sessions[sess.id]=sess
     payload=_startup_payload(shell_id,"\n".join(x for x in ((profile or {}).get("startup",""),str(startup or "")[:SAVED_STARTUP_MAX]) if x))
@@ -630,6 +658,22 @@ def _get(session_id):
     return sess
 def write_input(session_id,data):
     return _get(session_id).write(data)
+# What hosts a session: "pty" (Linux openpty), "conpty", "pipe" (Windows pipes, cannot run a TUI) or "elevated".
+# The session's own .backend stays "pipe" on Linux (existing readers compare it), so the pty case is derived here.
+def session_backend(sess):
+    backend=getattr(sess,"backend","pipe") or "pipe"
+    if backend=="pipe" and getattr(sess,"_master_fd",None) is not None:return "pty"
+    return backend
+def session_backend_of(session_id):
+    """The backend of a live session ("pty" | "conpty" | "pipe" | "elevated"), or None for an unknown id."""
+    sess=_sessions.get(session_id)
+    return None if sess is None else session_backend(sess)
+def set_session_raw(session_id,on):
+    sess=_get(session_id)
+    setter=getattr(sess,"set_raw",None)
+    if callable(setter):setter(on)
+    else:setattr(sess,"raw",bool(on))
+    return {"raw":bool(getattr(sess,"raw",False)),"backend":session_backend(sess)}
 def peek_output(session_id):
     session=_sessions.get(session_id)
     if session is None:return None
@@ -1273,7 +1317,7 @@ def _panel_mode(ext):
     return mode if mode in _PANEL_MODES else "right"
 def get_settings():
     ext=_extensions(_read_settings())
-    settings={"enabled":bool(ext.get("terminal_enabled",False)),"panel_width":_clamp_int(ext.get("terminal_width",380),260,900,380),"panel_height":_clamp_int(ext.get("terminal_panel_height",320),160,1200,320),"panel_mode":_panel_mode(ext),"panel_maximized":bool(ext.get("terminal_panel_maximized",False)),"confirm_multiline_paste":bool(ext.get("terminal_confirm_multiline_paste",True)),"use_conpty":bool(ext.get("terminal_use_conpty",False)),"conpty_supported":conpty_supported()}
+    settings={"enabled":bool(ext.get("terminal_enabled",False)),"panel_width":_clamp_int(ext.get("terminal_width",380),260,900,380),"panel_height":_clamp_int(ext.get("terminal_panel_height",320),160,1200,320),"panel_mode":_panel_mode(ext),"panel_maximized":bool(ext.get("terminal_panel_maximized",False)),"confirm_multiline_paste":bool(ext.get("terminal_confirm_multiline_paste",True)),"use_conpty":bool(ext.get("terminal_use_conpty",False)),"conpty_supported":conpty_supported(),"full_terminal_default":bool(ext.get("terminal_full_default",False))}
     settings.update(_run_behaviour(ext))
     settings["suggest_enabled"]=bool(ext.get("terminal_suggest_enabled",True))
     settings["font_size"]=_clamp_int(ext.get("terminal_font_size",12),9,22,12)
@@ -1292,6 +1336,7 @@ def set_run_behaviour(values):
             if value in choices:ext["terminal_"+key]=value
         if "confirm_multiline_paste" in values:ext["terminal_confirm_multiline_paste"]=bool(values.get("confirm_multiline_paste"))
         if "use_conpty" in values:ext["terminal_use_conpty"]=bool(values.get("use_conpty"))
+        if "full_terminal_default" in values:ext["terminal_full_default"]=bool(values.get("full_terminal_default"))
         if "suggest_enabled" in values:ext["terminal_suggest_enabled"]=bool(values.get("suggest_enabled"))
         d["extensions"]=ext
         _write_settings(d)

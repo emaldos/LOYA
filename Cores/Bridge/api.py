@@ -1611,8 +1611,10 @@ class TerminalAPI(BridgeModule):
         return _terminal_svc.set_default_shell(value)
     def create_task(self,task,params=None,cols=0,rows=0):
         return _terminal_svc.create_task_session(task,params,cols,rows)
-    def create(self,shell_id=None,profile_id=None,cols=0,rows=0,cwd="",startup="",label=""):
-        return _terminal_svc.create_session(shell_id,profile_id,cols,rows,cwd,startup,label)
+    def create(self,shell_id=None,profile_id=None,cols=0,rows=0,cwd="",startup="",label="",emulator=False):
+        return _terminal_svc.create_session(shell_id,profile_id,cols,rows,cwd,startup,label,emulator)
+    def set_raw(self,session_id,on):
+        return _terminal_svc.set_session_raw(session_id,on)
     def poll(self,session_ids,alive_ids=None):
         return _terminal_svc.poll_sessions(session_ids,alive_ids)
     def cwd(self,session_id):

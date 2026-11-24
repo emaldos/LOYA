@@ -122,7 +122,8 @@ function termOpenTabMenu(tab,x,y){
 const items=[
 {label:"Rename",icon:"edit",fn:()=>{const el=document.querySelector('.terminal-tab[data-id="'+tab.sessionId+'"]');if(el)termStartTabRename(el,tab)}},
 {label:"Save session...",icon:"save",disabled:!!tab.elevated,fn:()=>termOpenSaveSessionDialog(tab)},
-{label:"Duplicate session",icon:"copy",fn:()=>termNewTab(tab.profileId?"profile:"+tab.profileId:tab.shellId,{cwd:tab.cwd}).catch(()=>{})},
+{label:"Duplicate session",icon:"copy",fn:()=>termNewTab(tab.profileId?"profile:"+tab.profileId:tab.shellId,{cwd:tab.cwd,emulator:tab.emulator}).catch(()=>{})},
+...(typeof termEmuSetMode==="function"?[{label:"Full terminal mode"+(tab.emulator?" (on)":""),icon:tab.emulator?"check":"command-line",disabled:typeof termEmuLocked==="function"&&termEmuLocked(tab),fn:()=>termEmuSetMode(tab,!tab.emulator).then(()=>{if(tab.sessionId===termState.activeId)termFocusInput()})}]:[]),
 ...(typeof ReportEvidence!=="undefined"?ReportEvidence.tabMenuItems(tab):[]),
 {sep:true},
 {label:"Clear output",icon:"trash",fn:()=>{termActivateTab(tab.sessionId);termClearOutput()}},
@@ -136,6 +137,14 @@ openContextMenu(items,x,y)
 const TERM_ANSI_SGR_RE=/\x1b\[([0-9;]*)m/g
 const TERM_ANSI_OTHER_RE=/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_].*?\x1b\\|\x1b\[[0-9;?]*[A-Za-ln-z]|\x1b[()*+][0-9A-Za-z]|\x1b[=>NOM78]/g
 const TERM_ANSI_SGR_KEEP_RE=/\x1b\[[0-9;]*m/g
+// Where typing goes: the xterm of a tab in full terminal mode (terminal-emu.js), else the line input box.
+function termIsEmu(tab){return !!tab&&typeof termEmuOn==="function"&&termEmuOn(tab)}
+function termFocusInput(){
+const tab=termFindTab(termState.activeId)
+if(termIsEmu(tab)){termEmuFocus(tab);return}
+const input=document.getElementById("terminalInput")
+if(input)input.focus()
+}
 const TERM_REDRAW_RE=/\r*\x1b\[(\d*)A(?:\x1b\[[0-9;]*m)*\r*\x1b\[0?J/
 function termApplyRedraw(text){
 let out=text
@@ -855,7 +864,7 @@ return
 }
 if(window.getSelection&&!window.getSelection().isCollapsed)return
 if(e.target.closest(".term-listing"))return
-document.getElementById("terminalInput").focus()
+termFocusInput()
 }
 function termCollectIocs(tab){
 if(!tab)return {}
@@ -947,7 +956,7 @@ termUpdatePaneJump(pane)
 }
 function termUpdatePaneJump(pane){
 if(!pane||!pane.jump)return
-pane.jump.classList.toggle("hidden",pane.followOutput||!pane.sessionId)
+pane.jump.classList.toggle("hidden",pane.followOutput||!pane.sessionId||pane.out.classList.contains("term-emu"))
 const label=pane.jump.querySelector(".terminal-jump-label")
 if(label)label.textContent=pane.pendingOutput>0?"New output":"Jump to bottom"
 }
@@ -1112,6 +1121,7 @@ status.textContent=(termState.searchIndex+1)+" / "+total
 }
 function termRunSearch(){
 const tab=termFindTab(termState.activeId)
+if(termIsEmu(tab)){termEmuFind(tab,termState.searchQuery,{incremental:true});return}
 termState.searchMatches=termSearchMatches(tab)
 if(termState.searchIndex>=termState.searchMatches.length)termState.searchIndex=0
 termInvalidateRender(tab)
@@ -1119,6 +1129,8 @@ termRenderActiveOutput()
 termUpdateSearchStatus()
 }
 function termStepSearch(step){
+const emuTab=termFindTab(termState.activeId)
+if(termIsEmu(emuTab)){termEmuFind(emuTab,termState.searchQuery,{prev:step<0});return}
 if(!termState.searchMatches.length)return
 termState.searchIndex=(termState.searchIndex+step+termState.searchMatches.length)%termState.searchMatches.length
 termInvalidateRender(termFindTab(termState.activeId))
@@ -1150,9 +1162,10 @@ termState.searchFilter=false
 document.getElementById("terminalSearchBar").classList.add("hidden")
 document.getElementById("terminalSearchInput").value=""
 const tab=termFindTab(termState.activeId)
+if(termIsEmu(tab))termEmuClearSearch(tab)
 termInvalidateRender(tab)
 termRenderActiveOutput()
-document.getElementById("terminalInput").focus()
+termFocusInput()
 }
 function termToggleSearch(){
 if(termState.searchOpen)termCloseSearch()
@@ -1237,6 +1250,14 @@ termUpdatePaneJump(pane)
 if(focused)termUpdateLiveEcho()
 return
 }
+if(tab.emulator&&typeof termEmuMount==="function"&&termEmuMount(pane,tab)){
+pane.renderedTabId=tab.sessionId
+if(focused)termEmuSyncChrome()
+termUpdatePaneJump(pane)
+return
+}
+if(typeof termEmuUnmount==="function"&&out.classList.contains("term-emu"))termEmuUnmount(pane)
+if(focused&&typeof termEmuSyncChrome==="function")termEmuSyncChrome()
 const nodes=termEnsureStreamNodes(out)
 const needsFull=pane.renderedTabId!==tab.sessionId||tab.renderedVersion!==tab.renderVersion||tab.renderedLen>tab.buffer.length||(focused&&!!termState.searchQuery)
 if(needsFull){
@@ -1278,7 +1299,7 @@ termUpdateStatusBar()
 termRenderTabs()
 termRenderActiveOutput()
 if(termState.searchQuery)termRunSearch()
-document.getElementById("terminalInput").focus()
+termFocusInput()
 }
 const TERM_SCROLLBACK_CHARS=400000
 const TERM_SCROLLBACK_SLACK=65536
@@ -1297,6 +1318,12 @@ return true
 function termAppend(id,text){
 const tab=termFindTab(id)
 if(!tab||!text)return
+// Full terminal mode: the bytes go to xterm as they are; xterm keeps its own screen and scrollback.
+if(tab.emulator&&typeof termEmuWrite==="function"&&termEmuWrite(tab,text)){
+const emuPane=termPaneForSession(id)
+if(emuPane&&emuPane.renderedTabId!==id)termRenderPane(emuPane)
+return
+}
 termNoteJobPrompt(tab)
 tab.pendingRaw=(tab.pendingRaw||"")+text
 const lastBreak=tab.pendingRaw.lastIndexOf("\n")
@@ -1366,7 +1393,7 @@ showToast(reason,"error")
 return
 }
 termRenderTabs()
-termAppend(id,"\n[process exited]\n")
+termAppend(id,tab.emulator?"\r\n[process exited]\r\n":"\n[process exited]\n")
 showStatusIsland((tab.label||"Terminal session")+" ended","error")
 }
 function termCheckPendingCapture(tab){
@@ -1466,7 +1493,7 @@ opts=opts||{}
 const shell=termState.shells.find((s)=>s.id===shellId)
 const label=opts.name||termDefaultLabel(labelPrefix||(shell?shell.label:shellId),termState.tabs)
 const elevated=labelPrefix==="Elevated"
-termState.tabs.push({sessionId,shellId,label,buffer:"",dead:false,history:[],historyIdx:null,listings:[],pendingCapture:null,elevated,visible:"",pendingRaw:"",activeJob:null,jobHistory:[],lastExitCode:null,cwd:opts.cwd||"",renderVersion:0,renderedVersion:-1,renderedLen:0,ansiClasses:[],profileId:opts.profileId||"",prior:opts.prior||null,staged:"",cols:opts.cols||0,rows:opts.rows||0})
+termState.tabs.push({sessionId,shellId,label,buffer:"",dead:false,history:[],historyIdx:null,listings:[],pendingCapture:null,elevated,visible:"",pendingRaw:"",activeJob:null,jobHistory:[],lastExitCode:null,cwd:opts.cwd||"",renderVersion:0,renderedVersion:-1,renderedLen:0,ansiClasses:[],profileId:opts.profileId||"",prior:opts.prior||null,staged:"",cols:opts.cols||0,rows:opts.rows||0,rawInput:!!opts.rawInput,emulator:!!opts.emulator})
 if(opts.name)bridgeCall("terminal.rename",[sessionId,label]).catch(()=>{})
 termState.workspaceRestored=true
 const target=typeof opts.paneIndex==="number"?opts.paneIndex:-1
@@ -1574,8 +1601,10 @@ const profile=isProfile?(termState.profiles||[]).find((p)=>p.id===profileId):nul
 if(!isProfile&&!termState.shells.some((s)=>s.id===chosen)&&termState.shells.length)chosen=termState.shells[0].id
 const pane=typeof opts.paneIndex==="number"?termState.panes[opts.paneIndex]:termFocusedPane()
 const grid=termCurrentGrid(pane)
-return bridgeCall("terminal.create",[isProfile?null:chosen,profileId,grid?grid.cols:0,grid?grid.rows:0,opts.cwd||"",opts.startup||"",opts.name||""]).then((sessionId)=>{
-termAddSessionTab(sessionId,profile?profile.shell_id:chosen,profile?profile.name:undefined,Object.assign({},opts,{profileId:profileId||"",cols:grid?grid.cols:0,rows:grid?grid.rows:0}))
+// CLI tabs (rawInput) always run in full terminal mode; other tabs when asked, or when the setting is on for all new sessions.
+const emulator=typeof termEmuWants==="function"&&typeof termEmuAvailable==="function"&&termEmuAvailable()&&termEmuWants({rawInput:opts.rawInput,emulator:opts.emulator},termState.emuDefault)
+return bridgeCall("terminal.create",[isProfile?null:chosen,profileId,grid?grid.cols:0,grid?grid.rows:0,opts.cwd||"",opts.startup||"",opts.name||"",emulator]).then((sessionId)=>{
+termAddSessionTab(sessionId,profile?profile.shell_id:chosen,profile?profile.name:undefined,Object.assign({},opts,{profileId:profileId||"",cols:grid?grid.cols:0,rows:grid?grid.rows:0,emulator}))
 return sessionId
 }).catch((err)=>{console.error("terminal create failed",err);throw err})
 }
@@ -1613,9 +1642,11 @@ tab.historyIdx=null
 function termRunCommandText(text,meta){
 return termRunTargetSession(meta).then((id)=>{
 termActivateTab(id)
-document.getElementById("terminalInput").focus()
+termFocusInput()
 termRecordCommandHistory(termFindTab(id),text)
 const runTab=termFindTab(id)
+// Full terminal mode: the command is typed as is plus Enter, with no job markers (the program on screen would read them).
+if(runTab&&runTab.emulator)return bridgeCall("terminal.write",[id,text+"\r"]).then(()=>{termWakePolling();showStatusIsland("Sent to Terminal");return id})
 const runJobId=termNewJobId()
 if(runTab)runTab.activeJob={jobId:runJobId,command:text,startIdx:runTab.buffer.length,startedAt:Date.now(),exitCode:null,endedAt:null,endIdx:null}
 if(runTab)termRecordJobStart(runTab,runTab.activeJob,(meta&&meta.source)||"snippet")
@@ -1683,6 +1714,8 @@ return termRunCommandText(text,meta)
 }
 function termStageCommand(text){
 return termEnsureActiveSession().then(()=>{
+const emuTab=termFindTab(termState.activeId)
+if(termIsEmu(emuTab)){termEmuPaste(emuTab,text);termEmuFocus(emuTab);showStatusIsland("Command ready - press Enter to run");return null}
 const input=document.getElementById("terminalInput")
 input.value=text
 termUpdateLiveEcho()
@@ -2033,7 +2066,7 @@ pop.innerHTML='<div class="terminal-popover-title">Insert a saved command</div><
 const input=pop.querySelector("#termCmdSearchInput")
 const list=pop.querySelector("#termCmdSearchList")
 let items=[],selected=0
-const close=()=>{termClosePopover();document.getElementById("terminalInput").focus()}
+const close=()=>{termClosePopover();termFocusInput()}
 const highlight=()=>{list.querySelectorAll(".term-suggest-item").forEach((row,i)=>row.classList.toggle("active",i===selected));const a=list.querySelector(".active");if(a)a.scrollIntoView({block:"nearest"})}
 const render=()=>{
 items=termSuggestRank(termSuggest.entries,input.value,termSuggestFamily(),40)
@@ -2605,6 +2638,7 @@ if(closing&&closing.activeJob)bridgeCall("terminal.job_mark",[closing.activeJob.
 if(typeof ReportEvidence!=="undefined")ReportEvidence.onSessionClosed(id)
 const idx=termState.tabs.findIndex((t)=>t.sessionId===id)
 const closedTab=idx>=0?termState.tabs[idx]:null
+if(closedTab&&typeof termEmuDispose==="function")termEmuDispose(closedTab)
 // Remember first, then close: bridge calls run on parallel threads, and the backend reads the live cwd from the process.
 const close=()=>bridgeCall("terminal.close",[id]).catch(()=>{})
 if(closedTab&&!closedTab.elevated)termRememberClosed(closedTab).then(close,close)
@@ -2636,7 +2670,7 @@ if(!termState.activeId)return
 const tab=termFindTab(termState.activeId)
 // A tab running an interactive program (tab.rawInput, set by ext-cli-launch.js for the operator's own CLI) gets the line as typed
 // plus Enter (CR, what a real terminal sends): no job markers, which that program would read as text.
-if(tab&&tab.rawInput){bridgeCall("terminal.write",[termState.activeId,val+"\r"]).then(termWakePolling).catch((err)=>console.error("terminal write failed",err));return}
+if(tab&&(tab.rawInput||tab.emulator)){bridgeCall("terminal.write",[termState.activeId,val+"\r"]).then(termWakePolling).catch((err)=>console.error("terminal write failed",err));return}
 let payload=null
 if(tab&&val.trim()){
 if(tab.history[tab.history.length-1]!==val){
@@ -2792,7 +2826,7 @@ function termConfirmMultilinePaste(text){
 const count=text.split(/\r?\n/).length
 appConfirm(`Paste ${count} lines into the terminal?`,{okLabel:"Paste",cancelLabel:"Cancel",wide:true,danger:true,bodyHtml:termPastePreviewHtml(text)}).then((ok)=>{
 if(ok)termInsertAtCursor(text)
-else document.getElementById("terminalInput").focus()
+else termFocusInput()
 })
 }
 function termRecallHistory(dir){
@@ -2854,6 +2888,7 @@ termRenderSession(tab.sessionId)
 function termClearOutput(){
 const tab=termFindTab(termState.activeId)
 if(!tab)return
+if(termIsEmu(tab)){termEmuClear(tab);return}
 tab.buffer=""
 tab.visible=""
 tab.pendingRaw=""
@@ -2904,8 +2939,9 @@ return "Terminal - "+(tab.label||(shell?shell.label:tab.shellId))+" - "+new Date
 }
 function termSendSessionToNote(){
 const tab=termFindTab(termState.activeId)
-if(!tab||!tab.buffer.trim()){showToast("Nothing captured yet in this session","error");return}
-termOpenNotePicker(termSessionTitle(tab),tab.buffer)
+const text=termIsEmu(tab)?termEmuText(tab):(tab?tab.buffer:"")
+if(!tab||!text.trim()){showToast("Nothing captured yet in this session","error");return}
+termOpenNotePicker(termSessionTitle(tab),text)
 }
 function termSendJobToNote(job){
 const output=termJobOutput(job)
@@ -2955,7 +2991,7 @@ termApplyLayout()
 termApplyPaneLayout()
 if(!termState.tabs.length)termRestoreWorkspaceOrNew()
 else{termFillEmptyPanes();termStartPolling()}
-document.getElementById("terminalInput").focus()
+termFocusInput()
 termScheduleSizeSync()
 termSyncToggleButtons()
 }
@@ -3020,6 +3056,7 @@ if(!termState.open)return
 termState.panes.forEach((pane)=>{
 const tab=termFindTab(pane.sessionId)
 if(!tab||tab.dead)return
+if(tab.emulator){if(termIsEmu(tab))termEmuFit(tab);if(pane===termFocusedPane()){termState.cols=tab.cols;termState.rows=tab.rows};return}
 const grid=termCurrentGrid(pane)
 if(!grid||(grid.cols===tab.cols&&grid.rows===tab.rows))return
 tab.cols=grid.cols
@@ -3160,7 +3197,7 @@ function termToggleMaximize(){
 termState.maximized=!termState.maximized
 termApplyLayout()
 termSaveLayout({maximized:termState.maximized})
-document.getElementById("terminalInput").focus()
+if(typeof termFocusInput==="function")termFocusInput();else document.getElementById("terminalInput").focus()
 }
 function termOpenLayoutMenu(anchorEl){
 const box=anchorEl.getBoundingClientRect()
@@ -3180,6 +3217,7 @@ termState.commandClickAction=s.command_click_action||"copy"
 termState.snippetRunConfirm=s.snippet_run_confirm||"risky"
 termState.commandRunConfirm=s.command_run_confirm||"risky"
 termState.runDestination=s.run_destination||"active"
+termState.emuDefault=!!s.full_terminal_default
 termApplySuggestSettings(s)
 }
 function termApplyEnabled(enabled){
@@ -3322,7 +3360,7 @@ pane.followOutput=atBottom
 if(atBottom)pane.pendingOutput=0
 termUpdatePaneJump(pane)
 })
-pane.jump.addEventListener("click",()=>{termScrollToBottom(pane);document.getElementById("terminalInput").focus()})
+pane.jump.addEventListener("click",()=>{termScrollToBottom(pane);termFocusInput()})
 const title=el.querySelector(".terminal-pane-title")
 title.addEventListener("click",(e)=>{e.stopPropagation();termOpenPaneSwitcher(pane,title)})
 title.addEventListener("dblclick",(e)=>{e.preventDefault();closeContextMenu();termStartPaneRename(pane)})
@@ -3407,7 +3445,7 @@ document.removeEventListener("mouseup",up)
 document.body.classList.remove("term-split-dragging","term-split-x","term-split-y")
 termScheduleSizeSync()
 termSaveWorkspaceSoon()
-document.getElementById("terminalInput").focus()
+termFocusInput()
 }
 document.addEventListener("mousemove",move)
 document.addEventListener("mouseup",up)
@@ -3438,7 +3476,7 @@ termUpdateStatusBar()
 termRenderTabs()
 termRenderPane(next)
 if(termState.searchQuery)termRunSearch()
-if(!(opts&&opts.noInput))document.getElementById("terminalInput").focus()
+if(!(opts&&opts.noInput))termFocusInput()
 }
 function termFocusDirection(dir){
 if(termState.panes.length<2){showStatusIsland("Only one pane - pick a split layout first");return}
@@ -3484,7 +3522,7 @@ return chain
 }
 function termSetLayout(layout){
 layout=termNormalizeLayout(layout)
-if(layout===termState.layout){document.getElementById("terminalInput").focus();return}
+if(layout===termState.layout){termFocusInput();return}
 const count=termLayoutPaneCount(layout)
 if(termState.focusPane>=count){
 const focused=termFocusedPane(),keep=termState.panes[count-1]
@@ -3503,7 +3541,7 @@ termRenderTabs()
 termScheduleSizeSync()
 termSaveWorkspaceSoon()
 showStatusIsland("Terminal layout: "+TERM_LAYOUTS[layout].label)
-document.getElementById("terminalInput").focus()
+termFocusInput()
 }
 function termUpdateSplitButton(){
 const btn=document.getElementById("terminalSplitBtn")
@@ -3567,8 +3605,8 @@ else termRenderPaneHeads()
 input.addEventListener("mousedown",(e)=>e.stopPropagation())
 input.addEventListener("keydown",(e)=>{
 e.stopPropagation()
-if(e.key==="Enter"){e.preventDefault();commit(true);document.getElementById("terminalInput").focus()}
-else if(e.key==="Escape"){e.preventDefault();commit(false);document.getElementById("terminalInput").focus()}
+if(e.key==="Enter"){e.preventDefault();commit(true);termFocusInput()}
+else if(e.key==="Escape"){e.preventDefault();commit(false);termFocusInput()}
 })
 input.addEventListener("blur",()=>commit(true))
 }
