@@ -63,6 +63,36 @@ def _log(tag,msg):
     if _LOG is None:_LOG=_log_setup()
     try:_LOG.info(f"{tag} {msg}")
     except Exception:pass
+CRASH_LOG_MAX=1024*1024
+_CRASH_FH=None
+def _install_crash_logging():
+    """Record why the app died. A Python error on any thread goes to Note_log.log; a native crash (segfault/abort in
+    WebKit, GTK or WebView2) dumps every thread's Python stack to Logs/crash.log through faulthandler. The launcher
+    discards stdout/stderr, so without this a crash leaves no trace."""
+    global _CRASH_FH
+    import faulthandler,traceback
+    def _uncaught(kind,exc_type,exc,tb):
+        try:_log("[!]",f"Uncaught {kind}: "+"".join(traceback.format_exception(exc_type,exc,tb)).rstrip())
+        except Exception:pass
+    prev_hook=sys.excepthook
+    def _sys_hook(t,e,tb):
+        _uncaught("error",t,e,tb)
+        try:prev_hook(t,e,tb)
+        except Exception:pass
+    sys.excepthook=_sys_hook
+    def _thread_hook(args):
+        if args.exc_type is SystemExit:return
+        _uncaught(f"error in thread {getattr(args.thread,'name','?')}",args.exc_type,args.exc_value,args.exc_traceback)
+    threading.excepthook=_thread_hook
+    try:
+        d=_abs("Logs");os.makedirs(d,exist_ok=True)
+        path=os.path.join(d,"crash.log")
+        mode="w" if os.path.isfile(path) and os.path.getsize(path)>CRASH_LOG_MAX else "a"
+        _CRASH_FH=open(path,mode,encoding="utf-8")
+        _CRASH_FH.write(f"\n=== {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PID {os.getpid()} started ===\n");_CRASH_FH.flush()
+        faulthandler.enable(file=_CRASH_FH,all_threads=True)
+    except Exception as e:
+        _log("[!]",f"Crash log unavailable ({e})")
 def _console_python():
     py=os.path.abspath(sys.executable)
     if os.name=="nt" and py.lower().endswith("pythonw.exe"):
@@ -273,6 +303,7 @@ def _after_window_shown():
     try:_start_background_scheduler()
     except Exception as e:_log("[-]",f"Background scheduler not started ({e})")
 def main():
+    _install_crash_logging()
     try:
         _ensure_update_runtime()
         _sync_installed_version()

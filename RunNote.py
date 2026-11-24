@@ -423,12 +423,33 @@ def _linux_app_env():
     if "WEBKIT_DISABLE_DMABUF_RENDERER" not in env:env.setdefault("WEBKIT_DMABUF_RENDERER_FORCE_SHM","1")
     if env.get("WEBKIT_DMABUF_RENDERER_FORCE_SHM")=="1":env.setdefault("WEBKIT_SKIA_ENABLE_CPU_RENDERING","1")
     return env
+APP_OUTPUT_LOG_MAX=2*1024*1024
+def _app_output_log():
+    """The app's stdout/stderr go to Logs/app_output.log (started fresh once it passes 2 MB), so an error printed before
+    logging is set up, or by WebKit/GTK/WebView2 itself, is not lost. Falls back to discarding them."""
+    try:
+        d=_abs("Logs");os.makedirs(d,exist_ok=True)
+        path=os.path.join(d,"app_output.log")
+        mode="wb" if os.path.isfile(path) and os.path.getsize(path)>APP_OUTPUT_LOG_MAX else "ab"
+        fh=open(path,mode)
+        fh.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} launch ===\n".encode("utf-8"));fh.flush()
+        return fh
+    except Exception:
+        return None
 def _launch_app(py,pyw,app_path):
     if not os.path.isfile(app_path):
         return False,f"Missing file: {os.path.basename(app_path)}",0
     stdin=subprocess.DEVNULL
-    stdout=subprocess.DEVNULL
-    stderr=subprocess.DEVNULL
+    out=_app_output_log()
+    stdout=out if out is not None else subprocess.DEVNULL
+    stderr=subprocess.STDOUT if out is not None else subprocess.DEVNULL
+    try:
+        return _spawn_app(py,pyw,app_path,stdin,stdout,stderr)
+    finally:
+        if out is not None:
+            try:out.close()
+            except Exception:pass
+def _spawn_app(py,pyw,app_path,stdin,stdout,stderr):
     if _is_win():
         DETACHED_PROCESS=0x00000008
         CREATE_NEW_PROCESS_GROUP=0x00000200

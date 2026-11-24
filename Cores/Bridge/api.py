@@ -225,6 +225,8 @@ class WindowAPI(BridgeModule):
         x,y=(self._geo[0],self._geo[1]) if self._geo else (0,0)
         self._geo=(int(x),int(y),int(width),int(height))
     def _on_closing(self):
+        try:_diag_log.info("[*] Main window close requested")
+        except Exception:pass
         save_window_geometry(self._window,self._maximized,self._pre_maximize_geo,self._geo)
         try:_terminal_svc.close_all_sessions()
         except Exception:pass
