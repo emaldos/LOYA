@@ -6,7 +6,7 @@ const source=fs.readFileSync(path.join(ROOT,"UI","js","components","ext-connecti
 const start=source.indexOf("// ---- conn pure start")
 const end=source.indexOf("// ---- conn pure end")
 if(start<0||end<start)throw new Error("could not find the pure helpers in ext-connections.js")
-const api=new Function(source.slice(start,end)+"\nreturn {CONN_TOOLS,CONN_STEPS,connSigninPill,connLinkPill,connPickShell,connStepsText,connCommandFor,connPickMethod,connStepDone,connResumeIndex,connResumeStart,connRunWizard,connJobRun,connCancelToken,connIsCancel,CONN_CANCELLED}")()
+const api=new Function(source.slice(start,end)+"\nreturn {CONN_TOOLS,CONN_STEPS,connSigninPill,connSigninState,connNextText,connLinkPill,connPickShell,connStepsText,connCommandFor,connPickMethod,connStepDone,connResumeIndex,connResumeStart,connRunWizard,connJobRun,connCancelToken,connIsCancel,CONN_CANCELLED}")()
 const html=fs.readFileSync(path.join(ROOT,"UI","pages","settings.html"),"utf8")
 const settingsJs=fs.readFileSync(path.join(ROOT,"UI","js","pages","settings.js"),"utf8")
 const mainHtml=fs.readFileSync(path.join(ROOT,"UI","windows","main.html"),"utf8")
@@ -17,7 +17,21 @@ function eq(name,a,b){check(name,JSON.stringify(a)===JSON.stringify(b),JSON.stri
 eq("not installed",api.connSigninPill({installed:false}),{text:"Not installed",cls:"not_installed"})
 eq("signed in",api.connSigninPill({installed:true,signin:{state:"signed_in"}}).text,"Signed in")
 eq("signed out",api.connSigninPill({installed:true,signin:{state:"signed_out"}}).cls,"offline")
-eq("unknown",api.connSigninPill({installed:true,signin:{state:"unknown"}}).text,"Sign-in unknown")
+eq("unknown",api.connSigninPill({installed:true,signin:{state:"unknown"}}).text,"Could not check sign-in")
+// "could not check" is its own state, never shown as "not signed in"
+check("unknown pill differs from signed out",api.connSigninPill({installed:true,signin:{state:"unknown"}}).cls!=="offline")
+eq("unknown pill explains why",api.connSigninPill({installed:true,signin:{state:"unknown",detail:"Could not check the sign-in: timed out"}}).title,"Could not check the sign-in: timed out")
+eq("state words",["signed_in","signed_out","unknown",undefined,"weird"].map((x)=>api.connSigninState({signin:x===undefined?undefined:{state:x}})),["signed_in","signed_out","unknown","unknown","unknown"])
+// what the card / Refresh says next comes from the reported state (Refresh used to ask to sign in even when signed in)
+eq("next: signed in + connected",api.connNextText({installed:true,connected:true,signin:{state:"signed_in"}}),"Signed in and connected to LOYA NG.")
+eq("next: signed in, not connected",api.connNextText({installed:true,signin:{state:"signed_in"}}),"Signed in. Next: Connect to LOYA NG.")
+eq("next: signed out",api.connNextText({installed:true,signin:{state:"signed_out"}}),"Next: Sign in, then Connect to LOYA NG.")
+for(const st of [{installed:true,signin:{state:"unknown"}},{installed:true,connected:true,signin:{state:"unknown",last:"signed_in"}},{installed:true,signin:{state:"signed_in"}},{installed:true,connected:true,signin:{state:"signed_in"}}]){
+check("never asks to sign in unless signed out: "+JSON.stringify(st),!/Sign in/.test(api.connNextText(st)),api.connNextText(st))
+}
+check("unknown says it could not check",/could not be checked/.test(api.connNextText({installed:true,signin:{state:"unknown"}})))
+check("unknown mentions the last good state",/signed in before/.test(api.connNextText({installed:true,connected:true,signin:{state:"unknown",last:"signed_in"}})))
+check("no em/en dashes, ellipsis or middle dots in next texts",![{installed:true,signin:{state:"unknown"}},{installed:true,connected:true,signin:{state:"signed_out"}}].some((st)=>/[\u2013\u2014\u2026\u00b7]/.test(api.connNextText(st))))
 eq("link pill",[api.connLinkPill({connected:false}).text,api.connLinkPill({connected:true}).cls],["Not connected","online"])
 // shell for the sign-in tab: native shells only, never WSL
 eq("linux login shell",api.connPickShell([{id:"zsh"},{id:"shell"}],"linux"),"shell")

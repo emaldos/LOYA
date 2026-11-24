@@ -21,7 +21,8 @@ CLI commands used (from the vendors' CLI references, read 2026-11-24; the CLIs w
   claude mcp add --scope user --transport stdio <name> -- <cmd> [args] | claude mcp remove --scope user <name> | claude mcp get <name>
   codex --version | codex login status (exit 0 when signed in) | codex login
   codex mcp add <name> -- <cmd> [args] | codex mcp remove <name> | codex mcp get <name> --json
-Older CLIs without one of these answer with an error; that is reported as "unknown", never guessed.
+Older CLIs without one of these answer with an error; that, a timeout or any answer LOYA cannot read is reported as
+"unknown" with the reason, never guessed as "not signed in".
 """
 import os,sys,re,json,glob,shlex,shutil,secrets,hmac,hashlib,signal,tempfile,threading,time,subprocess,uuid
 from datetime import datetime,timezone
@@ -210,45 +211,101 @@ def cli_version(path):
     line=(out or err).strip().splitlines()
     return _clean(line[0],80) if line else ""
 _help_cache={}
-def _group_has(tool,path,word):
-    """True when `<cli> <group> --help` lists that subcommand (group: `auth` for claude, `login` for codex). Checked first
-    because an old CLI that does not know the subcommand could read "auth status" as a prompt and start a session;
-    --help never does."""
+def _group_help(tool,path):
+    """`<cli> <group> --help` text (group: `auth` for claude, `login` for codex), or None when that probe itself failed
+    (timed out, could not start, crashed). Only a probe that worked is cached (per CLI path and mtime, so an update is seen):
+    a slow first start must not leave the CLI marked as "too old" until LOYA NG restarts."""
     group=TOOL_INFO[tool]["status"][:-1]
     try:key=(path,os.path.getmtime(path))
     except OSError:key=(path,0)
-    if key not in _help_cache:
-        rc,out,err=_run([path]+group+["--help"],timeout=15)
-        _help_cache[key]=(out+"\n"+err) if rc==0 else ""
-    return bool(re.search(r"^\s*"+re.escape(word)+r"\b",_help_cache[key],re.M))
+    if key in _help_cache:return _help_cache[key]
+    rc,out,err=_run([path]+group+["--help"],timeout=CLI_TIMEOUT)
+    text=out+"\n"+err
+    if rc==0 or (rc not in (124,127) and re.search(r"^\s*(Usage|Commands)\b",text,re.M|re.I)):
+        _help_cache[key]=text
+        return text
+    return None
+def _group_has(tool,path,word):
+    """True when `<cli> <group> --help` lists that subcommand. Checked first because an old CLI that does not know the
+    subcommand could read "auth status" as a prompt and start a session; --help never does. False when the probe failed."""
+    text=_group_help(tool,path)
+    return bool(text) and bool(re.search(r"^\s*"+re.escape(word)+r"\b",text,re.M))
 def supports_status(tool,path):return _group_has(tool,path,"status")
 def login_args(tool,path):
-    """The CLI's own sign-in command. Claude Code before `claude auth login` existed: start `claude` and type /login."""
-    if tool=="claude_code" and not _group_has(tool,path,"login"):return []
+    """The CLI's own sign-in command. Claude Code before `claude auth login` existed: start `claude` and type /login.
+    When the help probe itself failed, the current command is shown (an unanswered probe says nothing about the version)."""
+    if tool=="claude_code" and _group_help(tool,path) is not None and not _group_has(tool,path,"login"):return []
     return list(TOOL_INFO[tool]["login"])
 _UNKNOWN_RX=re.compile(r"unknown (command|subcommand|option)|unrecognized|unexpected argument|invalid choice|no such command|not a valid",re.I)
+# What the CLIs print (read from the real CLIs / vendor docs 2026-11-24):
+#   claude auth status (JSON is the default; --text gives "Login method: ...", "Email: ..."):
+#     {"loggedIn": true, "authMethod": "claude.ai", "apiProvider": ..., "email": ..., "orgName": ..., ...}  exit 0
+#     {"loggedIn": false, "authMethod": "none", ...}                                                      exit 1
+#   codex login status: "Logged in using ChatGPT" / "Logged in using an API key - sk-...***" exit 0, "Not logged in" exit 1
+_SIGNED_OUT_RX=re.compile(r"\bnot (logged|signed) in\b|\blogged out\b|\bno (credentials|login|account)\b|\bplease (log|sign) in\b|\brun .{0,40}\b(login|log in|sign in)\b",re.I)
+_SIGNED_IN_RX=re.compile(r"^\s*(logged in|signed in)\b|^\s*login method\s*:|^\s*(email|account)\s*:",re.I|re.M)
+_CLAUDE_METHODS={"claude.ai":"Claude account (subscription)","oauth_token":"OAuth token","api_key":"API key","api_key_helper":"API key helper","third_party":"Bedrock / Vertex / Foundry"}
+_last_signin={}  # tool -> last definite state ("signed_in" / "signed_out"), shown next to a check that could not answer
+def _unknown(tool,why):
+    out={"state":"unknown","detail":"Could not check the sign-in: "+why}
+    last=_last_signin.get(tool)
+    if last:out["last"]=last
+    return out
+def _definite(tool,state,detail):
+    _last_signin[tool]=state
+    return {"state":state,"detail":detail}
+def _why_failed(rc,text):
+    if rc==124:return "the CLI did not answer within "+str(CLI_TIMEOUT)+" s. Press Refresh to try again."
+    if rc==127:return "the CLI could not be started ("+_clean(text,120)+")."
+    first=_clean(text.splitlines()[0] if text.strip() else "",160)
+    return ("the CLI answered with exit code "+str(rc)+(": "+first if first else "")+"."+" Press Refresh to try again.")
+def _claude_from_json(tool,rc,d):
+    li=d.get("loggedIn")
+    if not isinstance(li,bool):
+        return None
+    method_id=str(d.get("authMethod") or "")
+    if not li or method_id=="none":return _definite(tool,"signed_out","Not signed in.")
+    method=_CLAUDE_METHODS.get(method_id,method_id)
+    who=d.get("email") or d.get("account") or ""
+    org=d.get("orgName")
+    bits=[x for x in (method,who if isinstance(who,str) else "",org if isinstance(org,str) else "") if x]
+    return _definite(tool,"signed_in",_clean(" | ".join(bits) or "Signed in."))
+def _parse_json(text):
+    """The JSON object in the output (a CLI may print a notice line before it)."""
+    try:d=json.loads(text)
+    except Exception:
+        d=None
+        i=text.find("{")
+        if i>=0:
+            try:d=json.loads(text[i:text.rfind("}")+1])
+            except Exception:d=None
+    return d if isinstance(d,dict) else None
 def signin_status(tool,path=None):
-    """{"state": signed_in|signed_out|unknown, "detail": short text}. Asks the CLI itself; never reads its credential files."""
+    """{"state": signed_in|signed_out|unknown, "detail": short text[, "last": last definite state]}. Asks the CLI itself;
+    never reads its credential files. "signed_out" only when the CLI says so; anything else it cannot answer (timeout,
+    crash, unexpected output, a CLI too old to tell) is "unknown" with the reason, never guessed as signed out."""
     tool=_tool(tool)
     path=path or find_cli(tool)[0]
     if not path:return {"state":"unknown","detail":"Not installed."}
+    cmd=" ".join([TOOL_INFO[tool]["exe"]]+TOOL_INFO[tool]["status"])
+    if _group_help(tool,path) is None:
+        return _unknown(tool,"'"+" ".join([TOOL_INFO[tool]["exe"]]+TOOL_INFO[tool]["status"][:-1])+" --help' did not answer. Press Refresh to try again.")
     if not supports_status(tool,path):
-        return {"state":"unknown","detail":"This version of the CLI has no '"+" ".join(TOOL_INFO[tool]["status"])+"' command. Update it, or sign in and use it."}
-    rc,out,err=_run([path]+TOOL_INFO[tool]["status"])
-    text=(out.strip() or err.strip())
+        return _unknown(tool,"this version of the CLI has no '"+cmd+"' command. Update it, or sign in and use it.")
+    rc,out,err=_run([path]+TOOL_INFO[tool]["status"],timeout=CLI_TIMEOUT)
+    text=(out.strip()+"\n"+err.strip()).strip()
+    if rc in (124,127):return _unknown(tool,_why_failed(rc,err or out))
     if tool=="claude_code":
-        try:d=json.loads(out)
-        except Exception:d=None
-        if isinstance(d,dict):
-            signed=bool(d.get("loggedIn",rc==0)) and str(d.get("authMethod") or "")!="none"
-            method={"claude.ai":"Claude account (subscription)","oauth_token":"OAuth token","api_key":"API key","api_key_helper":"API key helper","third_party":"Bedrock / Vertex / Foundry"}.get(str(d.get("authMethod") or ""),str(d.get("authMethod") or ""))
-            who=d.get("email") or d.get("account") or ""
-            bits=[x for x in (method,who if isinstance(who,str) else "",d.get("orgName") if isinstance(d.get("orgName"),str) else "") if x]
-            return {"state":"signed_in" if signed else "signed_out","detail":_clean(" | ".join(bits) if signed else "Not signed in.")}
-    if _UNKNOWN_RX.search(text) or rc in (124,127):
-        return {"state":"unknown","detail":"This version of the CLI cannot report its sign-in state"+(" (timed out)" if rc==124 else "")+". Update it, or sign in and use it."}
-    if rc==0:return {"state":"signed_in","detail":_clean(text.splitlines()[0] if text else "Signed in.")}
-    return {"state":"signed_out","detail":_clean(text.splitlines()[0] if text else "Not signed in.")}
+        d=_parse_json(out)
+        if d is not None:
+            r=_claude_from_json(tool,rc,d)
+            if r is not None:return r
+    if _UNKNOWN_RX.search(text):return _unknown(tool,"this version of the CLI cannot report its sign-in state. Update it, or sign in and use it.")
+    if _SIGNED_OUT_RX.search(text):return _definite(tool,"signed_out",_clean(text.splitlines()[0]) or "Not signed in.")
+    if rc==0 and (_SIGNED_IN_RX.search(text) or tool=="codex_cli"):
+        line=next((l for l in text.splitlines() if l.strip()),"")
+        return _definite(tool,"signed_in",_clean(line) or "Signed in.")
+    return _unknown(tool,_why_failed(rc,text) if rc!=0 else "'"+cmd+"' gave an answer LOYA NG does not recognise ("+_clean(text,120)+").")
 # ---------------------------------------------------------------- skills
 def skills_dir(tool):
     """Where the CLI reads the operator's personal skills."""

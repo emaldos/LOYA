@@ -198,6 +198,90 @@ def _read_requirements(p):
                 n=f"{n}[{extra}]"
             out.append(n+v)
     return py_req,out
+# ---------------------------------------------------------------- console look (banner, colours, status lines)
+# Colours only on a real terminal; NO_COLOR turns them off, FORCE_COLOR forces them on. Windows 10+ consoles get ANSI
+# processing switched on first. Box/block glyphs are used only when the console encoding can print them.
+_UI={"color":None,"truecolor":False,"unicode":None}
+def _ui_enable_windows_vt():
+    try:
+        import ctypes
+        k=ctypes.windll.kernel32
+        h=k.GetStdHandle(-11)
+        mode=ctypes.c_ulong()
+        if not k.GetConsoleMode(h,ctypes.byref(mode)):return False
+        return bool(k.SetConsoleMode(h,mode.value|0x0004))
+    except Exception:
+        return False
+def _ui_color():
+    if _UI["color"] is None:
+        env=os.environ
+        if env.get("NO_COLOR"):on=False
+        elif env.get("FORCE_COLOR"):on=True
+        else:
+            try:on=sys.stdout.isatty() and env.get("TERM","")!="dumb"
+            except Exception:on=False
+        if on and _is_win():on=_ui_enable_windows_vt() or bool(env.get("WT_SESSION") or env.get("FORCE_COLOR"))
+        _UI["color"]=on
+        _UI["truecolor"]=on and (env.get("COLORTERM","").lower() in ("truecolor","24bit") or bool(env.get("WT_SESSION")))
+    return _UI["color"]
+def _ui_unicode():
+    if _UI["unicode"] is None:
+        try:
+            "█╔═⠋".encode(sys.stdout.encoding or "ascii")
+            _UI["unicode"]=True
+        except Exception:
+            _UI["unicode"]=False
+    return _UI["unicode"]
+_SGR={"reset":"0","bold":"1","dim":"2","italic":"3","red":"31","green":"32","yellow":"33","blue":"34","magenta":"35","cyan":"36","white":"97","grey":"90"}
+def _c(text,*styles):
+    if not _ui_color() or not styles:return str(text)
+    return "\x1b["+";".join(_SGR.get(x,x) for x in styles)+"m"+str(text)+"\x1b[0m"
+def _ui_rgb(r,g,b):
+    if _UI["truecolor"]:return f"38;2;{r};{g};{b}"
+    return "38;5;"+str(16+36*round(r/255*5)+6*round(g/255*5)+round(b/255*5))
+_LOGO_LETTERS={
+"L":["██╗     ","██║     ","██║     ","██║     ","███████╗","╚══════╝"],
+"O":[" ██████╗ ","██╔═══██╗","██║   ██║","██║   ██║","╚██████╔╝"," ╚═════╝ "],
+"Y":["██╗   ██╗","╚██╗ ██╔╝"," ╚████╔╝ ","  ╚██╔╝  ","   ██║   ","   ╚═╝   "],
+"A":[" █████╗ ","██╔══██╗","███████║","██╔══██║","██║  ██║","╚═╝  ╚═╝"],
+"N":["███╗   ██╗","████╗  ██║","██╔██╗ ██║","██║╚██╗██║","██║ ╚████║","╚═╝  ╚═══╝"],
+"G":[" ██████╗ ","██╔════╝ ","██║  ███╗","██║   ██║","╚██████╔╝"," ╚═════╝ "],
+" ":["   "]*6}
+def _ui_logo_rows():
+    return ["".join(_LOGO_LETTERS[ch][i] for ch in "LOYA NG") for i in range(6)]
+def _ui_gradient(row,width):
+    # App accent blue (#3b82f6) to violet (#a855f7) across the logo.
+    a,b=(59,130,246),(168,85,247)
+    out=[]
+    for i,ch in enumerate(row):
+        if ch==" ":out.append(ch);continue
+        t=i/max(1,width-1)
+        out.append("\x1b["+_ui_rgb(*(round(a[k]+(b[k]-a[k])*t) for k in range(3)))+";1m"+ch)
+    return "".join(out)+"\x1b[0m"
+def _ui_banner(version):
+    print()
+    if _ui_unicode():
+        rows=_ui_logo_rows();w=max(len(r) for r in rows)
+        for r in rows:print("  "+(_ui_gradient(r,w) if _ui_color() else r))
+    else:
+        print("  "+_c("L O Y A   N G","bold","blue"))
+    print("  "+_c("Language Of Your Attack","italic","grey"))
+    import platform
+    info=f"v{version}  |  Python {sys.version.split()[0]}  |  {platform.system()} {platform.machine()}  |  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    print("  "+_c(info,"dim"))
+    print("  "+_c("-"*len(info),"grey"))
+_STATUS={"ok":("  OK  ","green"),"warn":(" WARN ","yellow"),"fail":("FAILED","red"),"info":(" INFO ","cyan"),"skip":(" SKIP ","grey"),"wait":(" .... ","cyan")}
+def _status_tag(kind):
+    word,col=_STATUS.get(kind,_STATUS["info"])
+    return _c("[","bold")+_c(word,"bold",col)+_c("]","bold")
+def _step(kind,msg,tail=""):
+    line=f"{_status_tag(kind)} {msg}"
+    if tail:line+=" "+_c(tail,"dim")
+    sys.stdout.write(line+"\n");sys.stdout.flush()
+def _ui_error(msg):
+    sys.stdout.write(f"{_status_tag('fail')} {_c('ERROR:','bold','red')} {msg}\n");sys.stdout.flush()
+def _ui_warning(msg):
+    sys.stdout.write(f"{_status_tag('warn')} {_c('WARNING:','bold','yellow')} {msg}\n");sys.stdout.flush()
 class _Spinner:
     def __init__(self):
         self._stop=threading.Event()
@@ -211,12 +295,15 @@ class _Spinner:
         self._t=threading.Thread(target=self._run,daemon=True)
         self._t.start()
     def _run(self):
-        frames=["[.    ]","[..   ]","[...  ]","[.... ]","[.....]","[ ....]","[  ...]","[   ..]","[    .]"]
-        i=0
+        try:live=sys.stdout.isatty()
+        except Exception:live=False
+        if not live:return   # no animation in pipes/logs; stop() prints the final line
+        frames=list("\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f") if _ui_unicode() else ["|","/","-","\\"]
+        i=0;t0=time.time()
         while not self._stop.is_set():
             f=frames[i%len(frames)]
             i+=1
-            sys.stdout.write(f"\r{f} {self._msg} ")
+            sys.stdout.write("\r"+_c("[","bold")+_c(f" {f}{f}{f}{f} ","bold","cyan")+_c("]","bold")+f" {self._msg} "+_c(f"{time.time()-t0:.1f}s","dim")+"   ")
             sys.stdout.flush()
             time.sleep(0.08)
     def stop(self,ok=True,tail=""):
@@ -224,11 +311,11 @@ class _Spinner:
         self._stop.set()
         if self._t:
             self._t.join(timeout=0.5)
-        mark="[OK]" if ok else "[ERR]"
-        s=f"\r{mark} {self._msg}"
-        if tail:
-            s+=f" {tail}"
-        sys.stdout.write(s+" "*8+"\n")
+        try:live=sys.stdout.isatty()
+        except Exception:live=False
+        line=f"{_status_tag('ok' if ok else 'fail')} {self._msg}"
+        if tail:line+=" "+_c(tail,"dim")
+        sys.stdout.write(("\r\x1b[2K" if live and _ui_color() else ("\r" if live else ""))+line+(" "*8 if live and not _ui_color() else "")+"\n")
         sys.stdout.flush()
 def _run(cmd,spinner_msg=None,env=None,cwd=None):
     sp=_Spinner()
@@ -305,7 +392,7 @@ def _ensure_pip(py):
             return True,tail2
         if _pip_is_functional(py):
             _log("pip upgrade failed due to SSL/certificate issue in certificate chain; existing pip will be used\n"+tail2,"WARN")
-            print("WARNING: pip upgrade skipped (SSL certificate issue); existing pip will be used")
+            _ui_warning("pip upgrade skipped (SSL certificate issue); existing pip will be used")
             return True,""
         _log("pip upgrade failed (SSL); pip also not functional\n"+tail2,"ERROR")
         return False,tail2
@@ -547,7 +634,7 @@ def main():
     if args.get("version"):
         print(f"{_UPDATE_APP_NAME} v{_get_app_version()}");return 0
     for arg in args.get("unknown") or []:
-        print(f"WARNING: unknown option {arg!r} ignored (see --help)")
+        _ui_warning(f"unknown option {arg!r} ignored (see --help)")
     skip_update=bool(args.get("skip_update"))
     _VERBOSE=bool(args.get("verbose"))
     app_version=_get_app_version()
@@ -555,21 +642,23 @@ def main():
         _ensure_update_runtime(app_version)
         _sync_installed_version(app_version)
     except Exception as exc:
-        print(f"WARNING: updater runtime init failed ({exc})")
+        _ui_warning(f"updater runtime init failed ({exc})")
     _init_log()
     _log(f"{_UPDATE_APP_NAME} v{app_version} starting (Python {sys.version.split()[0]})")
     if _VERBOSE:
         _log(f"Verbose mode active; log retention={_log_retention_days()}d")
     if skip_update:
         _log("--skip-update flag active; pip/deps steps will be skipped")
-    print(f"{_UPDATE_APP_NAME} v{app_version}")
+    _t_start=time.time()
+    _ui_banner(app_version)
     req_path=_abs("Requirements.json")
     py_req,reqs=_read_requirements(req_path)
     if not _py_ok(py_req):
         msg=f"Python version not supported. Required: {py_req} | Current: {sys.version.split()[0]}"
         _log(msg,"ERROR")
-        print(f"ERROR: {msg}")
+        _ui_error(msg)
         return 2
+    _step("ok",f"Python {sys.version.split()[0]} supported")
     force_recovery=bool(args.get("force_recovery"))
     recovery_reason=str(args.get("recovery_reason","") or "")
     while True:
@@ -577,12 +666,12 @@ def main():
         rec=_run_recovery(force=force_recovery,reason=(recovery_reason or msg),report=report)
         if rec.get("error"):
             _log(str(rec.get("error")),"WARN")
-            print("WARNING: "+str(rec.get("error")))
+            _ui_warning(str(rec.get("error")))
         act=str(rec.get("action","continue") or "continue").strip().lower()
         if act=="restart":
             rok,rmsg=_restart_self()
             _log(f"Restart: {rmsg}","INFO" if rok else "ERROR")
-            print(rmsg if rok else "ERROR: "+rmsg)
+            _step("info",rmsg) if rok else _ui_error(rmsg)
             return 0 if rok else 10
         if act=="exit":
             _log("Exit requested by recovery","INFO")
@@ -592,75 +681,76 @@ def main():
             continue
         force_recovery=False;recovery_reason=""
         if ok:
-            if notice:print(notice)
+            if notice:_step("info",notice)
             break
         _log(f"Startup state validation failed: {msg}","ERROR")
-        print("ERROR: Startup state validation failed")
+        _ui_error("Startup state validation failed")
         print(msg)
         return 2
     running,old_pid=_check_already_running()
     if running:
         _log(f"Already running (PID: {old_pid})","WARN")
-        print(f"WARNING: LOYA NG is already running (PID: {old_pid})")
+        _ui_warning(f"LOYA NG is already running (PID: {old_pid})")
         return 0
     staged=_launch_staged_update()
     if staged.get("started"):
         msg=f"Installing the downloaded update {staged.get('version','')} - LOYA NG starts again by itself when it is done."
         _log(msg)
-        print(msg)
+        _step("info",msg)
         return 0
     if staged.get("error"):
         _log(f"Downloaded update not installed: {staged.get('error')}","WARN")
-        print("WARNING: downloaded update not installed: "+str(staged.get("error")))
+        _ui_warning("downloaded update not installed: "+str(staged.get("error")))
     venv_dir=_abs(".venv_windows" if _is_win() else ".venv_linux")
     _py_check=os.path.join(venv_dir,"Scripts","python.exe") if _is_win() else os.path.join(venv_dir,"bin","python3")
     stale_site=os.path.isdir(venv_dir) and not _is_win() and not _venv_sees_system_site(venv_dir)
     if os.path.isdir(venv_dir) and os.path.isfile(_py_check) and not stale_site:
-        sys.stdout.write("[OK] Venv ready (cached)\n");sys.stdout.flush()
+        _step("ok","Virtual environment ready","(cached)")
         _log("Venv already exists")
     else:
         if os.path.isdir(venv_dir):
             reason="Venv without system site-packages" if stale_site else "Incomplete venv"
-            sys.stdout.write(f"[..] {reason} detected, removing and recreating...\n");sys.stdout.flush()
+            _step("warn",f"{reason} detected, removing and recreating")
             _log(f"{reason} detected; removing before recreate")
             shutil.rmtree(venv_dir,ignore_errors=True)
         ok,tail=_ensure_venv(venv_dir)
         if not ok:
             _log(f"Failed to create venv: {tail}","ERROR")
-            print("ERROR: Failed to create venv")
+            _ui_error("Failed to create venv")
             print(tail)
             if not _is_win():
                 pkg="python3-venv"
                 m=re.search(r"apt install (\S+)",tail or "")
                 if m:pkg=m.group(1)
-                print(f"\nHint: Run:  sudo apt install {pkg} python3-pip")
+                print("\n"+_c("Hint:","bold","cyan")+f" Run:  sudo apt install {pkg} python3-pip")
             return 3
     py,pyw,pip=_venv_paths(venv_dir)
     if not os.path.isfile(py):
         _log("venv python not found after creation","ERROR")
-        print("ERROR: venv python not found — venv may be corrupted, delete it and re-run")
+        _ui_error("venv python not found - the venv may be corrupted, delete it and re-run")
         return 4
     if skip_update:
-        sys.stdout.write("[OK] Skipping pip/deps update (--skip-update)\n");sys.stdout.flush()
+        _step("skip","pip and dependency update","(--skip-update)")
         _log("pip/deps update skipped via --skip-update")
     else:
         t0=time.time()
         ok,tail=_ensure_pip(py)
         if not ok:
             _log(f"Failed to update pip ({time.time()-t0:.1f}s): {tail}","ERROR")
-            print("ERROR: Failed to update pip")
+            _ui_error("Failed to update pip")
             print(tail)
             return 5
         _log(f"pip ready ({time.time()-t0:.1f}s)")
+        _step("ok","pip ready",f"({time.time()-t0:.1f}s)")
         if _deps_up_to_date(reqs):
-            sys.stdout.write("[OK] Requirements up to date (cached)\n");sys.stdout.flush()
+            _step("ok","Requirements up to date","(cached)")
             _log("Deps fingerprint matches; skipping pip install")
         else:
             t0=time.time()
             ok,tail=_ensure_deps(py,reqs)
             if not ok:
                 _log(f"Failed to install requirements ({time.time()-t0:.1f}s): {tail}","ERROR")
-                print("ERROR: Failed to install requirements")
+                _ui_error("Failed to install requirements")
                 print(tail)
                 return 6
             _save_deps_state(reqs)
@@ -669,7 +759,7 @@ def main():
     ok,tail=_check_webview_runtime(py)
     if not ok:
         _log(f"Webview runtime check failed ({time.time()-t0:.1f}s): {tail}","ERROR")
-        print("ERROR: Webview runtime check failed")
+        _ui_error("Webview runtime check failed")
         msg=_webview_runtime_help(tail)
         if msg:
             print(msg)
@@ -682,11 +772,14 @@ def main():
     sp.stop(ok)
     if not ok:
         _log(f"Launch failed: {msg}","ERROR")
-        print(f"ERROR: {msg}")
+        _ui_error(msg)
         return 7
     _write_pid_file(pid)
     _log(f"Launched successfully (PID: {pid})","INFO")
-    print(f"OK: Running in background (PID: {pid})")
+    print()
+    print("  "+_c(">>","bold","magenta")+" "+_c("LOYA NG is running","bold","green")+_c(f"  |  PID {pid}  |  ready in {time.time()-_t_start:.1f}s","dim"))
+    print("  "+_c("Logs: Logs/  |  crash details: Logs/crash.log  |  RunNote.py --help for options","grey"))
+    print()
     return 0
 if __name__=="__main__":
     raise SystemExit(main())

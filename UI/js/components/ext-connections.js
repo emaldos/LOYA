@@ -18,7 +18,26 @@ if(!st||!st.installed)return {text:"Not installed",cls:"not_installed"}
 const s=st.signin&&st.signin.state
 if(s==="signed_in")return {text:"Signed in",cls:"online"}
 if(s==="signed_out")return {text:"Not signed in",cls:"offline"}
-return {text:"Sign-in unknown",cls:""}
+return {text:"Could not check sign-in",cls:"",title:(st.signin&&st.signin.detail)||"LOYA NG could not check the sign-in"}
+}
+// The sign-in state as one word: signed_in | signed_out | unknown ("could not check" is never shown as signed out).
+function connSigninState(st){
+const s=st&&st.signin&&st.signin.state
+return s==="signed_in"||s==="signed_out"?s:"unknown"
+}
+// The "what next" line under an installed CLI, from the state the backend just reported.
+function connNextText(st){
+if(!st||!st.installed)return "Not found. Install it, then press Check again."
+const s=connSigninState(st)
+const last=st.signin&&st.signin.last
+if(st.connected){
+if(s==="signed_in")return "Signed in and connected to LOYA NG."
+if(s==="signed_out")return "Connected to LOYA NG, but not signed in: Sign in to use it."
+return "Connected to LOYA NG. "+(last==="signed_in"?"The sign-in could not be checked this time (it was signed in before); press Refresh to try again.":"The sign-in could not be checked; press Refresh to try again.")
+}
+if(s==="signed_in")return "Signed in. Next: Connect to LOYA NG."
+if(s==="signed_out")return "Next: Sign in, then Connect to LOYA NG."
+return (last==="signed_in"?"The sign-in could not be checked this time (it was signed in before). ":"The sign-in could not be checked. ")+"Press Refresh to try again, or Connect to LOYA NG now."
 }
 function connLinkPill(st){
 if(!st||!st.connected)return {text:"Not connected",cls:""}
@@ -200,20 +219,20 @@ ${(st.install_methods||[]).map((m)=>connMethodHtml(m,platform)).join("")}
 <div class="conn-actions"><button type="button" class="set-btn conn-docs" data-tool="${st.tool}">Official install docs</button></div>
 </details></div>`
 }else{
-const next=!st.connected?(st.signin&&st.signin.state==="signed_in"?"Next: Connect to LOYA NG.":"Next: Sign in, then Connect to LOYA NG."):""
+const next=!st.connected||connSigninState(st)!=="signed_in"?connNextText(st):""
 body=`<dl class="conn-facts"><dt>Path</dt><dd><code>${connEsc(st.path)}</code></dd><dt>Version</dt><dd>${connEsc(st.version||"unknown")}</dd>
 <dt>Sign-in</dt><dd>${connEsc(st.signin&&st.signin.detail||"")}</dd>
 <dt>LOYA tools</dt><dd>${st.connected?`MCP server <code>${connEsc(st.server_name)}</code> in your ${connEsc(st.label)} config${st.skills&&st.skills.length?"; skills "+connEsc(st.skills.join(", "))+" in <code>"+connEsc(st.skills_dir)+"</code>":""}`:"not connected"}</dd></dl>
 ${next?`<div class="conn-next">${connEsc(next)}</div>`:""}
 <div class="conn-actions">
 ${!st.connected?`<button type="button" class="set-btn conn-wizard" data-tool="${st.tool}" title="Continue step by step from where you are">Set up</button>`:""}
-<button type="button" class="set-btn conn-signin" data-tool="${st.tool}" title="Opens a terminal running: ${connEsc(st.login_command||"")}">${st.signin&&st.signin.state==="signed_in"?"Sign in again":"Sign in"}</button>
+<button type="button" class="set-btn conn-signin" data-tool="${st.tool}" title="Opens a terminal running: ${connEsc(st.login_command||"")}">${connSigninState(st)==="signed_in"?"Sign in again":"Sign in"}</button>
 ${st.connected?`<button type="button" class="set-btn conn-connect" data-tool="${st.tool}" title="Register LOYA NG's MCP server again and update the LOYA skills">Update connection</button><button type="button" class="set-btn conn-test" data-tool="${st.tool}">Test connection</button><button type="button" class="set-btn danger conn-disconnect" data-tool="${st.tool}">Disconnect</button>`:`<button type="button" class="set-btn conn-connect" data-tool="${st.tool}">Connect to LOYA NG</button>`}
 <button type="button" class="set-btn conn-refresh" data-tool="${st.tool}">Refresh</button>
 </div>`
 }
 return `<div class="ai-provider-box conn-box" data-tool="${st.tool}">
-<div class="ai-provider-head"><span>${connEsc(st.label)}</span><span class="conn-pills"><span class="ai-status-pill ${signin.cls}">${connEsc(signin.text)}</span>${st.installed?`<span class="ai-status-pill ${link.cls}">${connEsc(link.text)}</span>`:""}</span></div>
+<div class="ai-provider-head"><span>${connEsc(st.label)}</span><span class="conn-pills"><span class="ai-status-pill ${signin.cls}"${signin.title?` title="${connEsc(signin.title)}"`:""}>${connEsc(signin.text)}</span>${st.installed?`<span class="ai-status-pill ${link.cls}">${connEsc(link.text)}</span>`:""}</span></div>
 ${body}
 <div class="set-status conn-status" data-tool="${st.tool}" role="status"></div>
 </div>`
@@ -261,7 +280,7 @@ Promise.resolve().then(()=>fn(tool)).catch((err)=>connStatus(tool,connErr(err),t
 }))
 on(".conn-refresh",(tool)=>connMountSettings(root).then(()=>{
 const st=connState.overview.tools[tool]
-connStatus(tool,st&&st.installed?"Found "+st.label+". Next: Sign in, then Connect to LOYA NG.":"Still not found.",!(st&&st.installed))
+connStatus(tool,st&&st.installed?"Found "+st.label+". "+connNextText(st):"Still not found.",!(st&&st.installed))
 }))
 on(".conn-docs",(tool)=>bridgeCall("notes.open_url",[connState.overview.tools[tool].docs]))
 on(".conn-signin",connSignIn)
@@ -451,11 +470,12 @@ return Promise.resolve({body:`<p>Wait until the installer in ${connEsc(w.install
 }
 if(v.step.id==="signin"){
 if(v.done)return already(st.signin.detail||"signed in")
+if(connSigninState(st)==="unknown")return Promise.resolve({body:`<div class="set-status error">${connEsc(st.signin&&st.signin.detail||"LOYA NG could not check the sign-in.")}</div><p>This does not mean you are signed out${st.signin&&st.signin.last==="signed_in"?" (the last check said you were signed in)":""}. If you already signed in, press Cancel and then Refresh on the card. Approve opens ${connEsc(st.label)}'s own sign-in anyway:</p>${connCmdRow("Command",st.login_command||"")}`,ok:"Open the sign-in"})
 return Promise.resolve({body:`<p>Approve opens a terminal running ${connEsc(st.label)}'s own sign-in:</p>${connCmdRow("Command",st.login_command||"")}<p class="set-info">You complete the vendor's browser sign-in yourself; LOYA NG never sees or stores it. Come back here when it says you are signed in.</p>`})
 }
 if(v.step.id==="connect"){
 if(v.done)return already(st.label+" already has LOYA NG's MCP server.")
-return bridgeCall("extAgents.connection_connect_preview",[tool]).then((p)=>({body:`<p>Approve registers LOYA NG's MCP server in your ${connEsc(st.label)} user config with its own command:</p>${connCmdRow("Command",p.command)}<p class="set-info">It also installs the LOYA skills (${connEsc(p.skills.join(", "))}) in <code>${connEsc(p.skills_dir)}</code>. ${connEsc(st.label)} then runs on your own account, and LOYA NG's AI Roles decide every tool call.</p>${st.signin&&st.signin.state!=="signed_in"?'<p class="set-info">You are not signed in yet; you can still connect and sign in later.</p>':""}`}))
+return bridgeCall("extAgents.connection_connect_preview",[tool]).then((p)=>({body:`<p>Approve registers LOYA NG's MCP server in your ${connEsc(st.label)} user config with its own command:</p>${connCmdRow("Command",p.command)}<p class="set-info">It also installs the LOYA skills (${connEsc(p.skills.join(", "))}) in <code>${connEsc(p.skills_dir)}</code>. ${connEsc(st.label)} then runs on your own account, and LOYA NG's AI Roles decide every tool call.</p>${connSigninState(st)==="signed_out"?'<p class="set-info">You are not signed in yet; you can still connect and sign in later.</p>':connSigninState(st)==="unknown"?'<p class="set-info">LOYA NG could not check the sign-in; you can still connect.</p>':""}`}))
 }
 return Promise.resolve({body:`<p>Approve runs a check of the whole path: the registration in ${connEsc(st.label)}, LOYA NG's MCP server, and a real tool list through the bridge.</p>`,ok:"Run the test"})
 }

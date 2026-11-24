@@ -14,6 +14,10 @@ from Cores.Services import ext_agents_service as ext
 from Cores.Services import ext_connections_service as conn
 FAKE=r'''
 import json,os,sys,time
+# The shape `claude auth status` (Claude Code 2.1.331) prints, with made-up values.
+REAL_SIGNED_IN={"loggedIn":True,"authMethod":"claude.ai","apiProvider":"firstParty","analyticsDisabled":False,"projectsDirectory":"/x/projects",
+    "configDirectory":"/x","loginExpiresAt":"2026-12-24T09:57:47.262Z","consoleProfileSignInOffered":True,"email":"op@example.test",
+    "orgId":"00000000-0000-0000-0000-000000000000","orgName":"Example Org","subscriptionType":"max","storedClaudeAiLogin":True,"planTier":"max"}
 name=sys.argv[1];args=sys.argv[2:]
 home=os.environ["HOME"]
 with open(os.path.join(home,"cli_calls.log"),"a") as f:f.write(json.dumps([name]+args)+"\n")
@@ -29,13 +33,19 @@ state_p=os.path.join(home,name+"_state.json")
 state=json.load(open(state_p)) if os.path.exists(state_p) else {}
 def save():json.dump(state,open(state_p,"w"))
 old=os.path.exists(os.path.join(home,name+"_old"))
+if args[-1:]==["--help"] and "help_rc" in state:sys.exit(state["help_rc"])  # test hook: the help probe fails
+if args in (["auth","status"],["login","status"]):
+    need=state.get("needs_env")  # test hook: signed in only when this variable reaches the CLI (keyring / config dir)
+    if need and os.environ.get(need[0])!=need[1]:state["signed"]=False
+    if "raw" in state:  # test hook: answer with exactly this output
+        r=state["raw"];sys.stdout.write(r.get("out",""));sys.stderr.write(r.get("err",""));sys.exit(r.get("rc",0))
 if args==["--version"]:print("2.1.400 (Claude Code)" if name=="claude" else "codex-cli 0.120.0");sys.exit(0)
 if name=="claude":
     if args==["auth","--help"]:
         print("Usage: claude auth [options] [command]\n\nCommands:\n"+("" if old else "  login [options]   Sign in\n  logout   Log out\n  status [options]  Show authentication status\n"));sys.exit(0)
     if args==["auth","status"]:
-        if state.get("signed"):print(json.dumps({"loggedIn":True,"authMethod":"claude.ai","email":"op@example.test","configDirectory":home}));sys.exit(0)
-        print(json.dumps({"loggedIn":False,"authMethod":"none"}));sys.exit(1)
+        if state.get("signed"):print(json.dumps(REAL_SIGNED_IN));sys.exit(0)
+        print(json.dumps({"loggedIn":False,"authMethod":"none","apiProvider":"firstParty"}));sys.exit(1)
     if args[:2]==["mcp","add"]:
         i=args.index("--");state.setdefault("mcp",{})[args[i-1]]={"opts":args[2:i-1],"cmd":args[i+1:]};save();print("Added stdio MCP server");sys.exit(0)
     if args[:2]==["mcp","remove"]:
@@ -162,6 +172,86 @@ class ConnectionsTest(unittest.TestCase):
         self.env.set_state("codex",signed=True)
         self.assertEqual({"state":"signed_in","detail":"Logged in using ChatGPT"},conn.signin_status("codex_cli"))
         self.assertIn(["claude","auth","status"],self.env.calls());self.assertIn(["codex","login","status"],self.env.calls())
+    def test_real_claude_json_shape(self):
+        self.env.set_state("claude",signed=True)
+        s=conn.signin_status("claude_code")
+        self.assertEqual("signed_in",s["state"]);self.assertEqual("Claude account (subscription) | op@example.test | Example Org",s["detail"])
+        self.env.set_state("claude",raw={"out":"Update available\n"+json.dumps({"loggedIn":True,"authMethod":"api_key"})+"\n","rc":0})
+        self.assertEqual(("signed_in","API key"),(lambda r:(r["state"],r["detail"]))(conn.signin_status("claude_code")))  # a notice line before the JSON
+    def test_claude_text_output_is_read_too(self):
+        self.env.set_state("claude",raw={"out":"Login method: Claude Max account\nEmail: op@example.test\n","rc":0})
+        self.assertEqual("signed_in",conn.signin_status("claude_code")["state"])
+        self.env.set_state("claude",raw={"out":"Not logged in. Run claude auth login to sign in.\n","rc":1})
+        self.assertEqual("signed_out",conn.signin_status("claude_code")["state"])
+    def test_cannot_check_is_unknown_never_signed_out(self):
+        cases=[{"out":"","err":"Error: EACCES: permission denied, open '/x/.claude.json'\n","rc":1},  # a crash
+               {"out":"","err":"","rc":1},  # nothing at all
+               {"out":"{\"loggedIn\":","rc":1},  # cut-off JSON
+               {"out":json.dumps({"something":"else"}),"rc":1}]  # JSON without loggedIn
+        for raw in cases:
+            self.env.set_state("claude",raw=raw)
+            s=conn.signin_status("claude_code")
+            self.assertEqual("unknown",s["state"],raw);self.assertTrue(s["detail"].startswith("Could not check the sign-in"),s)
+        for raw in ({"out":"","err":"thread 'main' panicked at keyring\n","rc":101},{"out":"","err":"","rc":2}):
+            self.env.set_state("codex",raw=raw)
+            self.assertEqual("unknown",conn.signin_status("codex_cli")["state"],raw)
+    def test_unknown_keeps_the_last_good_state(self):
+        conn._last_signin.clear()
+        self.env.set_state("claude",signed=True)
+        self.assertEqual("signed_in",conn.signin_status("claude_code")["state"])
+        self.env.set_state("claude",raw={"out":"","err":"boom","rc":3})
+        s=conn.signin_status("claude_code")
+        self.assertEqual(("unknown","signed_in"),(s["state"],s.get("last")))
+        conn._last_signin.clear()
+    def test_status_timeout_is_unknown(self):
+        self.env.set_state("claude",signed=True)
+        conn.signin_status("claude_code")  # help probe cached
+        self.env.hang("claude",["auth","status"],secs=30)
+        with mock.patch.object(conn,"CLI_TIMEOUT",1):
+            t=time.monotonic();s=conn.signin_status("claude_code")
+        self.assertLess(time.monotonic()-t,5)
+        self.assertEqual("unknown",s["state"]);self.assertIn("did not answer",s["detail"])
+    def test_help_probe_timeout_is_unknown_and_not_cached(self):
+        self.env.set_state("claude",signed=True)
+        self.env.hang("claude",["auth","--help"],secs=30)
+        with mock.patch.object(conn,"CLI_TIMEOUT",1):
+            s=conn.signin_status("claude_code")
+            self.assertEqual("unknown",s["state"]);self.assertIn("did not answer",s["detail"])
+            self.assertEqual(["auth","login"],conn.login_args("claude_code",conn.find_cli("claude_code")[0]))  # not "type /login"
+        os.remove(os.path.join(self.env.home,"claude_hang.json"))
+        self.assertEqual("signed_in",conn.signin_status("claude_code")["state"])  # the next Refresh probes again
+        self.env.set_state("codex",signed=True,help_rc=1)
+        self.assertEqual("unknown",conn.signin_status("codex_cli")["state"])
+        d=self.env.state("codex");d.pop("help_rc");json.dump(d,open(os.path.join(self.env.home,"codex_state.json"),"w"))
+        self.assertEqual("signed_in",conn.signin_status("codex_cli")["state"])
+    def test_cli_sees_the_operators_env(self):
+        """A CLI that keeps its sign-in in the keyring needs the session bus, and one with a custom config dir needs that
+        variable: the CLI must get the operator's own environment (only LOYA_* left out)."""
+        for k,v in (("DBUS_SESSION_BUS_ADDRESS","unix:path=/run/user/1/bus"),("XDG_RUNTIME_DIR","/run/user/1"),("CLAUDE_CONFIG_DIR",os.environ["CLAUDE_CONFIG_DIR"])):
+            with mock.patch.dict(os.environ,{k:v}):
+                self.env.set_state("claude",signed=True,needs_env=[k,v])
+                self.env.set_state("codex",signed=True,needs_env=[k,v])
+                self.assertEqual("signed_in",conn.signin_status("claude_code")["state"],k)
+                self.assertEqual("signed_in",conn.signin_status("codex_cli")["state"],k)
+        with mock.patch.dict(os.environ,{"LOYA_MCP_TOKEN":"x","HOME":self.env.home}):
+            env=conn._cli_env()
+        self.assertNotIn("LOYA_MCP_TOKEN",env);self.assertEqual(self.env.home,env["HOME"])
+    def test_status_is_stable_across_refreshes(self):
+        self.env.set_state("claude",signed=True);self.env.set_state("codex",signed=True)
+        for _ in range(3):
+            conn._help_cache.clear()  # an app restart
+            ov=conn.overview()
+            self.assertEqual(["signed_in","signed_in"],[ov["tools"][t]["signin"]["state"] for t in conn.TOOLS])
+            self.assertEqual("signed_in",conn.job_poll(self._job("status","claude_code"))["result"]["signin"]["state"])
+    def _job(self,kind,tool):
+        j=conn.job_start(kind,tool)["job"]
+        wait_for(lambda:conn.job_poll(j)["done"],30)
+        return j
+    def test_codex_api_key_status(self):
+        self.env.set_state("codex",raw={"out":"Logged in using an API key - sk-proj-***ABCD\n","rc":0})
+        self.assertEqual("signed_in",conn.signin_status("codex_cli")["state"])
+        self.env.set_state("codex",raw={"out":"Not logged in\n","rc":1})
+        self.assertEqual(("signed_out","Not logged in"),(lambda r:(r["state"],r["detail"]))(conn.signin_status("codex_cli")))
     def test_old_cli_is_never_given_an_unknown_subcommand(self):
         open(os.path.join(self.env.home,"claude_old"),"w").close()
         self.assertEqual("unknown",conn.signin_status("claude_code")["state"])
