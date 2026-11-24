@@ -6,7 +6,7 @@ Sign in button's quoting), the workspace folder, and the policy guard: the CLI i
 (never -p / --print / exec), and the chat bridge refuses the CLI entries."""
 import os,re,unittest
 from unittest import mock
-from _isolate import IsolatedData
+from _isolate import IsolatedData,ROOT
 from Cores.Services import ext_cli_launch as cli
 from Cores.Services import ext_connections_service as conn
 from Cores.Bridge import ext_agents_api
@@ -47,17 +47,31 @@ class LaunchLineTest(unittest.TestCase):
 class LaunchTest(unittest.TestCase):
     def setUp(self):
         self.iso=IsolatedData();self.dir=self.iso.start()
+        # The CLI workspace lives in a per-user folder: keep it inside the test's temp dir, never the real home.
+        self._env=mock.patch.dict(os.environ,{"XDG_DATA_HOME":os.path.join(self.dir,"xdg-home"),"LOCALAPPDATA":os.path.join(self.dir,"localappdata")})
+        self._env.start()
     def tearDown(self):
+        self._env.stop()
         self.iso.stop()
     def _connected(self,tool):
         with open(conn.connection_file(tool),"w") as f:f.write("{}")
-    def test_workspace_is_stable_per_tool_under_data(self):
+    def test_workspace_is_stable_per_tool_and_outside_any_git_repo(self):
         a=cli.workspace("claude_code");b=cli.workspace("codex_cli")
         self.assertTrue(os.path.isdir(a) and os.path.isdir(b))
         self.assertNotEqual(a,b)
         self.assertEqual(a,cli.workspace("claude_code"))
-        self.assertEqual(os.path.commonpath([a,self.dir]),os.path.normpath(self.dir))
-        self.assertTrue(a.endswith(os.path.join("external_agents","cli_workspace","claude_code")))
+        self.assertTrue(a.endswith(os.path.join("cli_workspace","claude_code")))
+        self.assertFalse(cli._inside_git_repo(a),"a CLI would extend folder trust to the enclosing repo")
+        self.assertNotEqual(os.path.commonpath([a,ROOT]),os.path.normpath(ROOT),"must not live inside the LOYA NG checkout")
+    def test_workspace_root_follows_the_platform_folders(self):
+        with mock.patch.dict(os.environ,{"XDG_DATA_HOME":os.path.join(self.dir,"xdg")}),mock.patch.object(cli,"_IS_WINDOWS",False):
+            self.assertEqual(cli._workspace_root(),os.path.join(self.dir,"xdg","loya-ng","cli_workspace"))
+        with mock.patch.dict(os.environ,{"LOCALAPPDATA":os.path.join(self.dir,"lad")}),mock.patch.object(cli,"_IS_WINDOWS",True):
+            self.assertEqual(cli._workspace_root(),os.path.join(self.dir,"lad","LOYA NG","cli_workspace"))
+    def test_a_root_inside_a_git_repo_falls_back_to_temp(self):
+        repo=os.path.join(self.dir,"repo");os.makedirs(os.path.join(repo,".git"))
+        with mock.patch.dict(os.environ,{"XDG_DATA_HOME":repo}),mock.patch.object(cli,"_IS_WINDOWS",False):
+            self.assertFalse(cli._inside_git_repo(cli._workspace_root()))
     def test_launch_command(self):
         self._connected("claude_code")
         with mock.patch.object(conn,"find_cli",return_value=("/opt/c c/claude","PATH")),mock.patch.object(conn,"_run") as run:

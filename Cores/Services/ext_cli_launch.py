@@ -30,9 +30,31 @@ def cli_state(st):
     if not st.get("connected"):return "not_connected"
     if ((st.get("signin") or {}).get("state"))!="signed_in":return "signin_unknown"
     return "ready"
+def _inside_git_repo(path):
+    p=os.path.abspath(path)
+    while True:
+        if os.path.exists(os.path.join(p,".git")):return True
+        parent=os.path.dirname(p)
+        if parent==p:return False
+        p=parent
+def _workspace_root():
+    """Where the CLI working folders live: a per-user folder OUTSIDE the LOYA NG checkout. The CLIs offer to "trust" their
+    working folder, and Codex extends that trust to the enclosing git repository, so a folder under Data/ (inside the
+    app's own repo) would hand the CLI the whole LOYA NG source tree.
+    Windows: %LOCALAPPDATA%\\LOYA NG\\cli_workspace. Linux: $XDG_DATA_HOME/loya-ng/cli_workspace (default ~/.local/share)."""
+    if _IS_WINDOWS:
+        base=os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"),"AppData","Local")
+        root=os.path.join(base,"LOYA NG","cli_workspace")
+    else:
+        base=os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"),".local","share")
+        root=os.path.join(base,"loya-ng","cli_workspace")
+    if _inside_git_repo(root):  # unusual setups (a home folder under git): fall back to the temp folder
+        import tempfile
+        root=os.path.join(tempfile.gettempdir(),"loya-ng-cli_workspace")
+    return root
 def workspace(tool):
-    """A stable per-tool working folder for the CLI's terminal tab: Data/external_agents/cli_workspace/<tool>."""
-    d=os.path.normpath(os.path.join(_conn._ext().base_dir(),"cli_workspace",_tool(tool)))
+    """A stable per-tool working folder for the CLI's terminal tab, outside any git repository (see _workspace_root)."""
+    d=os.path.normpath(os.path.join(_workspace_root(),_tool(tool)))
     os.makedirs(d,exist_ok=True)
     return d
 def launch_line(cli,shell_id,args=None):
