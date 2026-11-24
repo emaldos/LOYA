@@ -5,6 +5,7 @@ from Cores.Services import ai_sessions_service as _ai_sessions_svc
 from Cores.Services import ai_index_service as _ai_index_svc
 from Cores.Services import mcp_local_service as _mcp_local_svc
 from Cores.Services import ext_connections_service as _conn
+from Cores.Services import ext_cli_launch as _cli_launch
 def _provider(kind):
     kind=str(kind or "")
     if kind.startswith("ext:"):kind=kind[4:]
@@ -108,3 +109,9 @@ class ExternalAgentsAPI:
         return _conn.job_poll(job_id)
     def connection_job_cancel(self,job_id):
         return _conn.job_cancel(job_id)
+    # ---- AI panel "Claude Code (your CLI)" / "Codex CLI (your CLI)": open the operator's own CLI interactively in a terminal
+    # (ext_cli_launch). Nothing here sends chat-panel text to the CLI.
+    def cli_launch_command(self,tool,shell_id=""):
+        return _cli_launch.launch_command(tool,shell_id)
+    def cli_launch_os(self,tool):
+        return _cli_launch.launch_os_terminal(tool)

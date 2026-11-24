@@ -58,7 +58,7 @@
 .term-history-idx{flex:0 0 auto;color:var(--text-dim);min-width:22px;text-align:right}
 .term-history-cmd{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .term-history-empty{font-size:12px;color:var(--text-dim);padding:8px 9px}
-.terminal-output{flex:1;overflow:auto;padding:10px;font-family:var(--font-mono);font-size:12px;line-height:1.45;color:var(--text);white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
+.terminal-output{flex:1;overflow:auto;padding:10px;font-family:var(--font-mono);font-size:var(--term-font-size,12px);line-height:1.45;color:var(--text);white-space:pre-wrap;word-break:break-word;-webkit-user-select:text;user-select:text}
 .terminal-output .ansi-bold{font-weight:700}
 .terminal-output .ansi-dim{opacity:0.65}
 .terminal-output .ansi-italic{font-style:italic}
@@ -351,3 +351,14 @@ body.term-split-y,body.term-split-y *{cursor:row-resize!important}
 .term-session-modal textarea{resize:vertical;min-height:54px}
 .term-session-modal .term-save-target-field input:focus,.term-session-modal textarea:focus{border-color:var(--accent-a)}
 .term-session-keep{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text);cursor:pointer}
+/* Right-click menu over the terminal output (terminal-menu.js). Same look as .app-context-menu, plus shortcut hints,
+   submenus and a keyboard highlight; theme tokens only, so it follows dark and light. */
+.term-ctx-menu{min-width:232px;max-width:min(320px,calc(100vw - 16px));overflow-y:auto;z-index:95;outline:none;box-shadow:0 18px 42px -18px rgba(0,0,0,0.55),0 0 0 1px var(--glass-border)}
+.term-ctx-menu .app-context-menu-item{padding:6px 10px;outline:none}
+.term-ctx-menu .app-context-menu-item.term-ctx-open{background:var(--glass-bg)}
+.term-ctx-menu .app-context-menu-item.term-ctx-active{background:var(--accent-a-soft);box-shadow:inset 0 0 0 1px var(--accent-a-soft)}
+.term-ctx-menu .app-context-menu-sep{margin:3px 2px}
+.term-ctx-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.term-ctx-key{flex:0 0 auto;margin-left:14px;font-family:var(--font-ui);font-size:10.5px;color:var(--text-dim);background:transparent;border:none;padding:0}
+.term-ctx-menu .icon.term-ctx-caret,.term-ctx-menu .icon.term-ctx-check{width:12px;height:12px;margin-left:10px;opacity:0.75}
+.term-ctx-menu .app-context-menu-item.danger .term-ctx-key{color:inherit}

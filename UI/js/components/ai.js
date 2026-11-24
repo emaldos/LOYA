@@ -98,6 +98,7 @@ if(typeof aiChainTurnCards==="function")aiChainTurnCards(turn,i).forEach((c)=>wr
 function aiRenderChat(){
 const wrap=document.getElementById("aiChatMessages")
 wrap.innerHTML=""
+if(typeof cliRenderIfSelected==="function"&&cliRenderIfSelected(wrap))return  // "your CLI" entry: no chat (ext-cli-launch.js)
 if(!aiState.chatHistory.length&&!aiState.notices.length){
 const msg=aiState.selectedKind?"Ask the AI anything about your notes, commands, or targets.":"Enable a provider in Settings to start chatting."
 wrap.innerHTML=`<div class="ai-placeholder" id="aiChatEmpty"><i class="icon icon-brain"></i><p>${aiEscapeHtml(msg)}</p></div>`
@@ -207,6 +208,7 @@ else bridgeCall("ai.chat_abort_stream",[aiState.activeStreamId]).catch(()=>{})
 }
 function aiRunChatTurn(text,genToken,attachments,display){
 if(typeof aiChainWatchStart==="function")aiChainWatchStart()
+if(typeof cliIsEntryKind==="function"&&cliIsEntryKind(aiState.selectedKind))return Promise.reject(new Error("Your own CLI runs in its terminal tab, not in the chat."))
 const agent=typeof extIsAgentKind==="function"&&extIsAgentKind(aiState.selectedKind)
 const skill=aiState.pendingSkill||null
 aiState.pendingSkill=null
@@ -244,6 +246,7 @@ poll()
 }
 function aiChatSend(promptText){
 if(aiState.sending)return
+if(typeof cliRefuseChat==="function"&&cliRefuseChat())return
 const input=document.getElementById("aiChatInput")
 const text=(promptText!==undefined?promptText:input.value).trim()
 if(!text)return
@@ -293,6 +296,7 @@ return list
 }
 function aiSendPrompt(prompt,shown,attachments){
 if(aiState.sending)return Promise.reject(new Error("A message is already in progress."))
+if(typeof cliRefuseChat==="function"&&cliRefuseChat())return Promise.reject(new Error("Pick a chat provider: your own CLI runs in its terminal tab."))
 if(!aiState.selectedKind){aiNoProvider();return Promise.reject(new Error("No AI provider is enabled."))}
 attachments=attachments||[]
 const turn={role:"user",content:prompt}
@@ -434,6 +438,7 @@ aiNotice(rows.length?"Matches for \""+arg+"\" - click to attach:":"Nothing match
 }
 function aiSendExternalPrompt(text){
 if(!aiState.selectedKind)return Promise.reject(new Error("Enable an AI provider in Settings first."))
+if(typeof cliRefuseChat==="function"&&cliRefuseChat())return Promise.reject(new Error("Pick a chat provider: your own CLI runs in its terminal tab."))
 if(aiState.sending)return Promise.reject(new Error("A message is already in progress."))
 aiState.chatHistory=[...aiState.chatHistory,{role:"user",content:text}]
 aiRenderChat()
@@ -566,6 +571,7 @@ dot.className="ai-status-dot"+(status==="online"?" online":status==="offline"?" 
 }
 function aiPollStatus(){
 if(!aiState.selectedKind){aiSetStatusDot("");return}
+if(typeof cliIsEntryKind==="function"&&cliIsEntryKind(aiState.selectedKind)){cliPollStatus();return}
 if(typeof extIsAgentKind==="function"&&extIsAgentKind(aiState.selectedKind)){bridgeCall("extAgents.status",[aiState.selectedKind]).then((r)=>aiSetStatusDot(r&&r.ready?"online":"offline")).catch(()=>aiSetStatusDot("offline"));return}
 bridgeCall("ai.test_provider",[aiState.selectedKind]).then((r)=>aiSetStatusDot(r&&r.status==="online"?"online":"offline")).catch(()=>aiSetStatusDot("offline"))
 }
@@ -583,8 +589,9 @@ const select=document.getElementById("aiProviderSelect")
 const agentsCall=typeof extProviderGroups==="function"?bridgeCall("extAgents.enabled").catch(()=>[]):Promise.resolve([])
 return Promise.all([bridgeCall("ai.enabled_providers"),bridgeCall("ai.get_default"),agentsCall]).then(([list,defaultKind,agents])=>{
 select.innerHTML=""
-if(agents&&agents.length){
-const groups=extProviderGroups(list,agents)
+const withCli=typeof cliProviderGroups==="function"&&typeof extProviderGroups==="function"
+if((agents&&agents.length)||withCli){
+const groups=withCli?cliProviderGroups(extProviderGroups(list,agents||[])):extProviderGroups(list,agents)
 select.disabled=false
 groups.forEach((g)=>{
 const og=document.createElement("optgroup")

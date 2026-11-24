@@ -48,6 +48,18 @@ class PanelLayoutTests(unittest.TestCase):
         self.assertTrue(terminal.get_settings()["panel_maximized"])
         terminal.set_panel_layout({"maximized":False})
         self.assertFalse(terminal.get_settings()["panel_maximized"])
+    def test_font_size_defaults_round_trips_and_clamps(self):
+        self.assertEqual(12,terminal.get_settings()["font_size"])
+        terminal.set_panel_layout({"font_size":15})
+        self.assertEqual(15,terminal.get_settings()["font_size"])
+        terminal.set_panel_layout({"font_size":3})
+        self.assertEqual(9,terminal.get_settings()["font_size"])
+        terminal.set_panel_layout({"font_size":99})
+        self.assertEqual(22,terminal.get_settings()["font_size"])
+        terminal.set_panel_layout({"font_size":"huge"})
+        self.assertEqual(12,terminal.get_settings()["font_size"])
+        terminal.set_panel_layout({"mode":"bottom"})
+        self.assertEqual(12,terminal.get_settings()["font_size"])
     def test_legacy_width_setter_still_works(self):
         terminal.set_panel_width(500)
         self.assertEqual(500,terminal.get_settings()["panel_width"])

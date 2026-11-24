@@ -2634,6 +2634,9 @@ if(!termState.tabs.length)termStopPolling()
 function termSubmitCommand(val){
 if(!termState.activeId)return
 const tab=termFindTab(termState.activeId)
+// A tab running an interactive program (tab.rawInput, set by ext-cli-launch.js for the operator's own CLI) gets the line as typed
+// plus Enter (CR, what a real terminal sends): no job markers, which that program would read as text.
+if(tab&&tab.rawInput){bridgeCall("terminal.write",[termState.activeId,val+"\r"]).then(termWakePolling).catch((err)=>console.error("terminal write failed",err));return}
 let payload=null
 if(tab&&val.trim()){
 if(tab.history[tab.history.length-1]!==val){
@@ -2768,6 +2771,8 @@ input.focus()
 termUpdateLiveEcho()
 }
 function termPasteFromClipboard(){
+// WebKitGTK's readText() resolves "" here; terminal-menu.js reads through execCommand("paste") there instead.
+if(typeof termCtxPaste==="function"){termCtxPaste(false);return}
 if(!navigator.clipboard||!navigator.clipboard.readText){showToast("Clipboard is not available here - use Ctrl+V","error");return}
 navigator.clipboard.readText().then((text)=>{
 if(!text)return
@@ -3863,4 +3868,6 @@ document.getElementById("terminalClearBtn").addEventListener("click",termClearOu
 document.getElementById("terminalSaveBtn").addEventListener("click",(e)=>termOpenSaveMenu(e.currentTarget))
 termWireResize()
 termStartAiRequestWatch()
+// Right-click menu over the output (terminal-menu.js).
+if(typeof termCtxWire==="function")termCtxWire()
 }

@@ -1276,6 +1276,7 @@ def get_settings():
     settings={"enabled":bool(ext.get("terminal_enabled",False)),"panel_width":_clamp_int(ext.get("terminal_width",380),260,900,380),"panel_height":_clamp_int(ext.get("terminal_panel_height",320),160,1200,320),"panel_mode":_panel_mode(ext),"panel_maximized":bool(ext.get("terminal_panel_maximized",False)),"confirm_multiline_paste":bool(ext.get("terminal_confirm_multiline_paste",True)),"use_conpty":bool(ext.get("terminal_use_conpty",False)),"conpty_supported":conpty_supported()}
     settings.update(_run_behaviour(ext))
     settings["suggest_enabled"]=bool(ext.get("terminal_suggest_enabled",True))
+    settings["font_size"]=_clamp_int(ext.get("terminal_font_size",12),9,22,12)
     settings["shortcuts"]=_shortcuts(ext)
     settings["platform"]="windows" if _IS_WINDOWS else "linux"
     settings["default_shell_choice"]=str(ext.get("terminal_default_shell","") or "").strip()[:80] or DEFAULT_SHELL_AUTO
@@ -1316,6 +1317,7 @@ def set_panel_layout(values):
         if "width" in values:ext["terminal_width"]=_clamp_int(values.get("width"),260,900,380)
         if "height" in values:ext["terminal_panel_height"]=_clamp_int(values.get("height"),160,1200,320)
         if "maximized" in values:ext["terminal_panel_maximized"]=bool(values.get("maximized"))
+        if "font_size" in values:ext["terminal_font_size"]=_clamp_int(values.get("font_size"),9,22,12)
         d["extensions"]=ext
         _write_settings(d)
     return get_settings()
