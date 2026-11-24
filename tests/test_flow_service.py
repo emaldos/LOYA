@@ -47,7 +47,7 @@ class LinearChainTests(Base):
     def test_a_linear_chain_is_listed_and_shown_as_a_derived_diagram(self):
         pid=linear_chain("Recon","echo one","echo two {IPv4}")
         rows=flows.list_flows()
-        self.assertEqual([{"playbook_id":pid,"name":"Recon","caller":"recon","step_count":2,"has_graph":False,"node_count":3,"ai_made":False,"ai_reviewed":True}],[{k:v for k,v in r.items() if k!="updated_at"} for r in rows])
+        self.assertEqual([{"playbook_id":pid,"name":"Recon","caller":"recon","step_count":2,"has_graph":False,"node_count":3,"ai_made":False,"ai_reviewed":True,"origin":""}],[{k:v for k,v in r.items() if k!="updated_at"} for r in rows])
         got=flows.get(pid)
         self.assertTrue(got["derived"])
         self.assertEqual(("Recon","recon",False,True,[]),(got["name"],got["caller"],got["ai_made"],got["ai_reviewed"],got["errors"]))
@@ -732,7 +732,7 @@ class BridgeTests(Base):
         bridge=Fake().flows
         self.assertEqual([],bridge.list())
         names=[n for n in dir(FlowsAPI) if not n.startswith("_") and n!="bind"]
-        self.assertEqual({"catalog","list","get","create","save","validate","revert_linear","export_json","import_json","template","plan","run","run_status","active_runs","pause","resume","stop","approve","runs","run_get","run_delete","runs_clear","mark_reviewed","prefs_get","prefs_set","ai_guide","create_ai_draft","export_file","import_file","run_log","run_log_text","run_log_export","policy_get","policy_set"},set(names)-{"bind"})
+        self.assertEqual({"catalog","list","get","create","save","validate","revert_linear","export_json","import_json","template","demos","demo","create_from_demo","plan","run","run_status","active_runs","pause","resume","stop","approve","runs","run_get","run_delete","runs_clear","mark_reviewed","prefs_get","prefs_set","ai_guide","create_ai_draft","export_file","import_file","run_log","run_log_text","run_log_export","policy_get","policy_set"},set(names)-{"bind"})
         common_db.set_locked(True)
         for name in names:
             with self.assertRaises(ValueError,msg=name) as caught:getattr(bridge,name)()
@@ -802,7 +802,7 @@ class BridgeTests(Base):
         made=bridge.create("Bridge",graph([cmd("a","echo bridge")],["start.out>a"]))
         self.assertEqual({"playbook_id"},set(made))
         pid=made["playbook_id"]
-        self.assertEqual({"playbook_id","name","caller","graph","derived","ai_made","ai_reviewed","ai_client","errors","warnings"},set(bridge.get(pid)))
+        self.assertEqual({"playbook_id","name","caller","graph","derived","ai_made","ai_reviewed","ai_client","origin","errors","warnings"},set(bridge.get(pid)))
         self.assertEqual({"ok","errors","warnings"},set(bridge.save(pid,bridge.get(pid)["graph"])))
         self.assertEqual({"ok","errors","warnings","graph"},set(bridge.validate(bridge.get(pid)["graph"])))
         self.assertEqual({"target","commands","scripts","actions","approvals","subchains","ai_made","needs_review","review_each_run","terminal_enabled","sandbox","script_policy","raw","raw_refused","errors","warnings","blocked","missing","fingerprint"},set(bridge.plan(pid)))

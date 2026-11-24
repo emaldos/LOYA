@@ -62,6 +62,57 @@ chainsRefreshList().then(()=>chainsOpenChain(res.id))
 }).catch((err)=>showError(err&&err.message?err.message:"Create failed"))
 },true))
 }
+// "New chain": one button, one small chooser. Diagrams are the main way to build a chain; the classic step list stays as an option.
+// Pure: the choices, in order (Blank diagram is the default). Without the diagram editor only the step list is offered.
+function chainsNewOptions(hasDiagrams){
+const steps={id:"steps",label:"Simple step list (classic action chain)",desc:"Saved commands run one after another, as before. You can turn it into a diagram later.",icon:"list"}
+if(!hasDiagrams)return [steps]
+return [{id:"blank",label:"Blank diagram",desc:"An empty canvas with only a Start node.",icon:"chain"},
+{id:"demo",label:"Start from a demo",desc:"Worked pentest workflows. Opening one copies it into your chains.",icon:"star"},
+{id:"template",label:"Start from a template",desc:"Small starter diagrams to build on.",icon:"copy"},steps]
+}
+function chainsNewChooserHtml(options){
+return '<div class="cmds-popover-title" id="chainsNewChooserTitle">New chain</div><div class="chains-new-list" role="listbox" aria-labelledby="chainsNewChooserTitle">'+(options||[]).map((o,i)=>'<button type="button" class="chains-new-opt'+(i===0?" is-default":"")+'" role="option" aria-selected="'+(i===0?"true":"false")+'" data-new="'+chainsEscapeHtml(o.id)+'"><i class="icon icon-'+chainsEscapeHtml(o.icon)+'"></i><span class="chains-new-text"><span class="chains-new-name">'+chainsEscapeHtml(o.label)+'</span><span class="chains-new-desc">'+chainsEscapeHtml(o.desc)+"</span></span></button>").join("")+'</div><div class="cmds-popover-actions"><button type="button" data-new-x="cancel">Cancel</button></div>'
+}
+function chainsHasDiagrams(){return typeof chainsFlowNewPrompt==="function"}
+// What each choice opens. The diagram dialogs live in chains_flow.js; the step list is chainsCreatePrompt below.
+function chainsNewChoose(kind){
+if(kind==="steps"||!chainsHasDiagrams())return chainsCreatePrompt()
+if(kind==="demo"&&typeof chainsFlowDemosPrompt==="function")return chainsFlowDemosPrompt()
+if(kind==="template"&&typeof chainsFlowTemplatesPrompt==="function")return chainsFlowTemplatesPrompt()
+return chainsFlowNewPrompt(null,{blank:true})
+}
+function chainsNewChooser(){
+const options=chainsNewOptions(chainsHasDiagrams())
+if(options.length===1)return chainsNewChoose(options[0].id)
+const pop=document.createElement("div")
+pop.className="cmds-popover glass-panel chains-new-chooser"
+pop.setAttribute("role","dialog")
+pop.setAttribute("aria-label","New chain")
+pop.innerHTML=chainsNewChooserHtml(options)
+openModal(pop)
+pop.addEventListener("click",(e)=>{
+const t=e.target
+if(t&&t.closest&&t.closest('[data-new-x="cancel"]')){closeModal();return}
+const b=t&&t.closest?t.closest("[data-new]"):null
+if(!b)return
+closeModal(true)
+chainsNewChoose(b.dataset.new)
+})
+// Up and Down move between the choices; Enter or Space picks the focused one (they are buttons).
+pop.addEventListener("keydown",(e)=>{
+if(e.key!=="ArrowDown"&&e.key!=="ArrowUp")return
+const list=Array.from(pop.querySelectorAll(".chains-new-opt"))
+if(!list.length)return
+e.preventDefault()
+const i=list.indexOf(document.activeElement)
+const next=list[(i<0?0:i+(e.key==="ArrowDown"?1:-1)+list.length)%list.length]
+if(next)next.focus()
+})
+const first=pop.querySelector(".chains-new-opt")
+if(first)setTimeout(()=>first.focus(),0)
+return pop
+}
 // The caller editor in the chain detail view: saves on Enter or blur, an empty caller removes it.
 function chainsSaveCaller(){
 const input=document.getElementById("cmdsChainCallerInput")
@@ -99,12 +150,13 @@ wrap.innerHTML=""
 if(!items.length){
 const empty=document.createElement("div")
 empty.className="cmds-empty-msg"
-if(all.length){empty.textContent="No action chains match your search"}
+if(all.length){empty.textContent="No chains match your search"}
 else{
-empty.innerHTML='<div>No action chains yet</div><div class="chains-empty-hint">An action chain runs saved commands one after another against the live target.</div><button type="button" class="cmds-playbook-new-btn chains-empty-new"><i class="icon icon-add"></i><span>New Action Chain</span></button>'
-empty.querySelector("button").addEventListener("click",chainsCreatePrompt)
+empty.innerHTML='<div>No chains yet</div><div class="chains-empty-hint">A chain runs commands, requests and checks against the live target. Start from a blank diagram, a demo or a template.</div><button type="button" class="cmds-playbook-new-btn chains-empty-new"><i class="icon icon-add"></i><span>New chain</span></button>'
+empty.querySelector("button").addEventListener("click",chainsNewChooser)
 }
 wrap.appendChild(empty)
+chainsDecorateList(wrap)
 return
 }
 items.forEach((pb)=>{
@@ -118,6 +170,11 @@ card.addEventListener("click",()=>chainsOpenChain(pb.id))
 if(typeof chainsFlowDecorateCard==="function")chainsFlowDecorateCard(card,pb)
 wrap.appendChild(card)
 })
+chainsDecorateList(wrap)
+}
+// Hook for the diagram editor (chains_flow.js): the built-in Demos gallery under the list, filtered by the same search.
+function chainsDecorateList(wrap){
+if(typeof chainsFlowDecorateList==="function")chainsFlowDecorateList(wrap,chainsState.search)
 }
 function chainsRefreshList(){
 chainsShowList()
@@ -311,7 +368,7 @@ if(chainsState.currentId!=null)chainsShowList()
 chainsRenderList()
 })
 search.addEventListener("keydown",(e)=>{if(e.key==="Escape"&&search.value){e.preventDefault();e.stopPropagation();search.value="";chainsState.search="";chainsRenderList()}})
-document.getElementById("chainsNewBtn").addEventListener("click",chainsCreatePrompt)
+document.getElementById("chainsNewBtn").addEventListener("click",chainsNewChooser)
 document.querySelectorAll(".chh-switch-btn").forEach((b)=>{
 b.addEventListener("click",()=>chainsSetTab(b.dataset.chainsTab))
 b.addEventListener("keydown",(e)=>{if(e.key==="ArrowRight"||e.key==="ArrowLeft"){e.preventDefault();const t=chainsSetTab(chainsState.tab==="history"?"chains":"history");const on=document.querySelector('.chh-switch-btn[data-chains-tab="'+t+'"]');if(on)on.focus()}})
@@ -348,4 +405,4 @@ else chainsRefreshList()
 return chainsRefreshList()
 }).catch((err)=>console.error("chains init failed",err))
 }
-if(typeof module!=="undefined"&&module.exports)module.exports={chainsFilterItems,chainsEscapeHtml,chainsTabName}
+if(typeof module!=="undefined"&&module.exports)module.exports={chainsFilterItems,chainsEscapeHtml,chainsTabName,chainsNewOptions,chainsNewChooserHtml}

@@ -53,10 +53,20 @@ setPointerCapture(){}
 releasePointerCapture(){}
 scrollIntoView(){}
 }
-function makeEditor(opts){
+// A controllable clock for win.setTimeout/clearTimeout: timers wait until advance(ms) reaches their due time.
+function makeClock(){
+const c={now:0,n:0,list:[],
+set(fn,ms){const id=++c.n;c.list.push({fn,due:c.now+(Number(ms)||0),id});return id},
+clear(id){c.list=c.list.filter((t)=>t.id!==id)},
+advance(ms){const end=c.now+ms;for(;;){const due=c.list.filter((t)=>t.due<=end).sort((a,b)=>a.due-b.due||a.id-b.id)[0];if(!due)break;c.list=c.list.filter((t)=>t!==due);c.now=due.due;due.fn()}c.now=end}}
+return c
+}
+// clock: optional makeClock(); without it setTimeout queues into win.q and tick() runs it at once (the old behaviour).
+function makeEditor(opts,clock){
 const win={q:[],console:{log(){},warn(){},error(){}},requestAnimationFrame:(fn)=>{win.q.push(fn);return win.q.length},cancelAnimationFrame(){},setTimeout:(fn)=>{win.q.push(fn);return win.q.length},clearTimeout(){},addEventListener(){},removeEventListener(){}}
+if(clock){win.setTimeout=(fn,ms)=>clock.set(fn,ms);win.clearTimeout=(id)=>clock.clear(id)}
 const doc={createElement:(t)=>new El(t),createElementNS:(ns,t)=>Object.assign(new El(t),{ns:ns}),addEventListener(){},removeEventListener(){},activeElement:null,defaultView:win,body:new El("body")}
-const box={module:{exports:{}},console:win.console,document:doc,window:win,setTimeout:win.setTimeout,clearTimeout(){}}
+const box={module:{exports:{}},console:win.console,document:doc,window:win,setTimeout:win.setTimeout,clearTimeout:clock?win.clearTimeout:()=>{}}
 vm.createContext(box)
 vm.runInContext(CATALOG+"\n"+MODEL+"\n"+EDITOR,box)
 const get=(expr)=>vm.runInContext(expr,box)
@@ -64,7 +74,7 @@ const host=new El("div");host.ownerDocument=doc
 const log={prefs:[],changes:0,selects:[],wires:[],runs:[],opens:[]}
 const ed=get("flowEditorCreate")(host,Object.assign({onPrefs:(p)=>log.prefs.push(p),onChange:()=>{log.changes++},onSelect:(ids)=>log.selects.push(ids),onAutoWire:(i)=>log.wires.push(i),onRunState:(s)=>log.runs.push(s),onOpenNode:(id,tab)=>log.opens.push([id,tab])},opts||{}))
 const tick=()=>{for(let i=0;i<5;i++){const q=win.q.splice(0);q.forEach((fn)=>{try{fn()}catch(_){}})}}
-return {ed,host,log,get,tick,item:get("flowCatalogItem"),M:box.module.exports}
+return {ed,host,log,get,tick,clock,win,item:get("flowCatalogItem"),M:box.module.exports}
 }
 const M=require(path.join(ROOT,"UI","js","components","flow-model.js"))
 const E=require(path.join(ROOT,"UI","js","components","flow-editor.js"))
@@ -280,6 +290,89 @@ eq("escaping: a node title, a command and a note text are set as text, never par
 check("escaping: an unknown note colour falls back to yellow, class names stay clean",note.classList.contains("flow-comment-yellow")&&X.ed.el.all().every((e)=>/^[A-Za-z0-9_ -]*$/.test(e.className)))
 const bad=M.flowNewGraph();bad.nodes.push({id:"q",type:"teleport\" x=\"",title:"T",x:0,y:0,config:{}});X.ed.setGraph(bad)
 check("escaping: an unknown node type still draws, as an 'unknown' card with a clean class",(()=>{const u=X.ed.el.querySelectorAll(".flow-node").find((x)=>x.getAttribute("data-id")==="q");return !!u&&u.classList.contains("flow-cat-unknown")&&/^[A-Za-z0-9_ -]*$/.test(u.className)})())}
+}
+// ---- the empty-canvas hint: close button, 30 s fade, never back once dismissed (fake clock)
+{
+eq("hint: timings are exported",[E.FLOW_HINT_MS,E.FLOW_HINT_FADE_MS],[30000,600])
+const fire=(el,type,e)=>(el.listeners[type]||[]).forEach((fn)=>fn(Object.assign({stopPropagation(){},preventDefault(){},target:el},e||{})))
+const hintOf=(T)=>T.ed.el.querySelector(".flow-empty-hint")
+const shown=(T)=>{const h=hintOf(T);return !!h&&h.hidden===false}
+{const T=makeEditor({},makeClock()),h=hintOf(T),x=h&&h.querySelector(".flow-empty-close")
+check("hint: a new empty editor shows it",shown(T)&&T.ed.isHintShown()===true)
+check("hint: it still says how to start",/Build your workflow/.test(h.querySelector(".flow-empty-title").textContent)&&/Tab or \//.test(h.querySelector(".flow-empty-text").textContent))
+check("hint: the close button is a real button (keyboard focusable) labelled Dismiss",!!x&&x.tagName==="BUTTON"&&x.type==="button"&&x.getAttribute("aria-label")==="Dismiss"&&x.title==="Dismiss"&&!x.disabled)
+check("hint: the close button comes first and carries the close icon",h.children[0]===x&&x.children.length===1&&x.children[0].className==="icon icon-close")
+check("hint: a pointerdown on the close button does not reach the canvas",(()=>{let stopped=false;fire(x,"pointerdown",{stopPropagation(){stopped=true}});return stopped})())
+eq("hint: one 30 s timer is pending",T.clock.list.map((t)=>t.due),[30000])
+fire(x,"click")
+check("hint: clicking the close button hides it at once (no fade)",h.hidden===true&&!h.classList.contains("is-fading")&&T.ed.isHintShown()===false)
+eq("hint: closing clears the 30 s timer",T.clock.list.length,0)
+T.ed.setGraph(M.flowNewGraph())
+check("hint: stays hidden after setGraph of an empty graph",h.hidden===true&&!T.ed.isHintShown())
+const n=T.ed.addNodeAt("command");T.ed.select([n.id]);T.ed.deleteSelection()
+check("hint: stays hidden after adding then removing a node",T.ed.getGraph().nodes.length===1&&h.hidden===true)
+T.ed.setReadOnly(true);T.ed.setReadOnly(false)
+check("hint: stays hidden after a read-only round trip",h.hidden===true)
+T.clock.advance(60000)
+check("hint: and no timer brings it back",h.hidden===true&&T.clock.list.length===0)}
+{const T=makeEditor({},makeClock()),h=hintOf(T)
+T.clock.advance(29999)
+check("hint: at 29999 ms it is still shown, not fading",shown(T)&&!h.classList.contains("is-fading"))
+T.clock.advance(1)
+check("hint: at 30000 ms it starts to fade (still in the DOM for the transition)",h.hidden===false&&h.classList.contains("is-fading")&&T.ed.isHintShown()===false)
+T.clock.advance(599)
+check("hint: during the fade it is still there",h.hidden===false&&h.classList.contains("is-fading"))
+T.clock.advance(1)
+check("hint: 600 ms later it is hidden and the fade class is gone",h.hidden===true&&!h.classList.contains("is-fading"))
+T.ed.setGraph(M.flowNewGraph());T.clock.advance(60000)
+check("hint: once faded it never comes back for this editor",h.hidden===true&&T.clock.list.length===0)}
+{const T=makeEditor({},makeClock())
+check("hint: a second editor shows it again",shown(T))
+const n=T.ed.addNodeAt("command")
+check("hint: adding a node hides it",!!n&&!shown(T))
+T.ed.select([n.id]);T.ed.deleteSelection()
+check("hint: removing it again shows it (not dismissed)",shown(T))
+T.ed.undo()
+check("hint: undo back to a node hides it",T.ed.getGraph().nodes.length===2&&!shown(T))
+const g=M.flowNewGraph();M.flowAddNode(g,"command",300,160,{commands:[{text:"id"}]})
+T.ed.setGraph(M.flowNewGraph())
+check("hint: an empty graph again shows it",shown(T))
+T.ed.setGraph(g)
+check("hint: setGraph with a non-start node hides it",!shown(T))
+T.ed.setGraph(M.flowNewGraph());T.clock.advance(30000+600)
+check("hint: the one timer keeps running across graph changes (not restarted)",!shown(T)&&T.clock.list.length===0)}
+{const T=makeEditor({},makeClock()),h=hintOf(T)
+fire(T.ed.el,"keydown",{key:"Escape"})
+check("hint: Escape on the canvas with nothing else going on dismisses it",h.hidden===true&&!T.ed.isHintShown()&&T.clock.list.length===0)}
+{const T=makeEditor({},makeClock()),h=hintOf(T)
+const n=T.ed.addNodeAt("command");T.ed.select([n.id]);T.ed.deleteSelection();T.ed.select([T.ed.getGraph().nodes[0].id])
+check("hint: (setup) a selection with the hint shown",shown(T)&&T.ed.getSelection().length===1)
+fire(T.ed.el,"keydown",{key:"Escape"})
+check("hint: Escape first clears the selection and keeps the hint",T.ed.getSelection().length===0&&shown(T))
+fire(T.ed.el,"keydown",{key:"Escape"})
+check("hint: a second Escape dismisses it",h.hidden===true)}
+{const T=makeEditor({},makeClock())
+T.ed.dismissHint()
+check("hint: dismissHint() hides it at once and clears the timer",!shown(T)&&T.clock.list.length===0)}
+{const T=makeEditor({readOnly:true},makeClock())
+check("hint: a read-only editor shows no hint and starts no timer",!shown(T)&&!T.ed.isHintShown()&&T.clock.list.length===0)}
+{const T=makeEditor({},makeClock())
+T.ed.destroy()
+check("hint: destroy clears its timers",T.clock.list.length===0)
+let threw=null;try{T.clock.advance(60000)}catch(err){threw=err}
+check("hint: advancing the clock after destroy does not throw",threw===null)}
+{const T=makeEditor({},makeClock());T.clock.advance(30000)
+T.ed.destroy()
+check("hint: destroy during the fade clears the fade timer too",T.clock.list.length===0)}
+{const T=makeEditor({}),h=hintOf(T)
+check("hint: without the fake clock the old queued setTimeout still works",shown(T))}
+const css=noComments(CSS)
+check("hint css: the close button is styled and clickable through the hint",/\.flow-empty-close\{[^}]*pointer-events:auto/.test(css)&&/\.flow-empty-close:focus-visible\{[^}]*outline:/.test(css))
+check("hint css: the fading state and its transition",/\.flow-empty-hint\.is-fading\{opacity:0\}/.test(css)&&/\.flow-empty-hint\{transition:opacity \.6s/.test(css))
+check("hint css: no transition with prefers-reduced-motion",/@media \(prefers-reduced-motion:reduce\)\{\.flow-empty-hint\{transition:none\}\}/.test(css))
+check("hint: the fade length matches the css transition",E.FLOW_HINT_FADE_MS===600)
+check("hint: timers go through the editor's window, not the global",/st\.hint\.timer=win\.setTimeout\(/.test(EDITOR)&&/h\.fade=win\.setTimeout\(/.test(EDITOR))
+check("shortcuts: Escape also dismisses the hint",E.FLOW_EDITOR_SHORTCUTS.some((r)=>r.keys==="Escape"&&/dismiss the empty-canvas hint/.test(r.label)))
 }
 console.log("chains_studio: "+passed+" passed, "+failed+" failed")
 if(failed)process.exit(1)

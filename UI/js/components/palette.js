@@ -17,7 +17,7 @@ const PALETTE_ACTIONS=[
 {id:"report-undo",label:"Reporting: Undo",run:()=>window.Reporting&&Reporting.undo()},
 {id:"report-redo",label:"Reporting: Redo",run:()=>window.Reporting&&Reporting.redo()},
 {id:"nav-chains",label:"Go to Chains",keywords:"action chains playbooks caller run sequence",run:()=>goToPage("chains")},
-{id:"new-chain",label:"New Action Chain",keywords:"chains playbook caller",run:()=>goToPage("chains").then(()=>chainsCreatePrompt())},
+{id:"new-chain",label:"New chain",keywords:"chains playbook caller diagram demo template action chain step list",run:()=>goToPage("chains").then(()=>chainsNewChooser())},
 {id:"nav-cve",label:"Go to CVE Intel",keywords:"cve vulnerability vulnerabilities nvd kev epss news",run:()=>goToPage("cve")},
 {id:"nav-targets",label:"Go to Targets",run:()=>goToPage("targets")},
 {id:"nav-snippets",label:"Go to Quick Run",keywords:"snippets cheat sheet favourites",run:()=>goToPage("snippets")},

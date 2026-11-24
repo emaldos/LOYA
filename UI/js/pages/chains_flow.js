@@ -1,6 +1,7 @@
 // Chains page: the diagram view of an Action Chain (the "n8n style" editor). Wires flow-editor.js (canvas), flow-inspector.js
 // (node forms) and flow-run.js (confirmation, live run, history) into #chainsFlowHost, and plugs into pages/chains.js through
-// its hooks: chainsFlowDecorateCard(card,pb), chainsFlowOpenChain(id), #chainsNewDiagramBtn, #chainsOpenDiagramBtn.
+// its hooks: chainsFlowDecorateCard(card,pb), chainsFlowDecorateList(wrap,query), chainsFlowOpenChain(id), #chainsOpenDiagramBtn.
+// The page's one "New chain" chooser (chainsNewChooser) opens chainsFlowNewPrompt, chainsFlowDemosPrompt or chainsFlowTemplatesPrompt.
 // Nothing is autosaved: Save is explicit and leaving with unsaved changes asks first. No localStorage: preferences go through
 // flows.prefs_get / flows.prefs_set. Every string that reaches innerHTML goes through flowEscape.
 // Public entry points for other code: loyaOpenChainDiagram(playbookId), loyaOpenChainDraft({name,graph,ai_made,caller}).
@@ -14,19 +15,22 @@ const ids={},meta={}
 ;(Array.isArray(rows)?rows:[]).forEach((r)=>{
 if(!r||r.playbook_id===undefined||r.playbook_id===null)return
 const id=String(r.playbook_id)
-meta[id]={id:r.playbook_id,name:String(r.name||""),caller:String(r.caller||""),steps:Number(r.step_count)||0,hasGraph:!!r.has_graph,nodes:Number(r.node_count)||0,aiMade:!!r.ai_made,reviewed:r.ai_reviewed!==false}
+meta[id]={id:r.playbook_id,name:String(r.name||""),caller:String(r.caller||""),steps:Number(r.step_count)||0,hasGraph:!!r.has_graph,nodes:Number(r.node_count)||0,aiMade:!!r.ai_made,reviewed:r.ai_reviewed!==false,origin:String(r.origin||"")}
 if(r.has_graph)ids[id]=true
 })
 return {ids,meta}
 }
-// What an unreviewed chain is called: an AI built it, or it was imported from a file.
-function chainsFlowOrigin(aiMade){
-return aiMade?"AI-made":"Imported"
+// What an unreviewed chain is called: an AI built it, it is a copy of a built-in demo, or it was imported from a file.
+function chainsFlowOrigin(aiMade,origin){
+return aiMade?"AI-made":origin==="demo"?"Demo copy":"Imported"
+}
+function chainsFlowOriginText(aiMade,origin){
+return aiMade?"An AI client built this chain":origin==="demo"?"This chain is a copy of a built-in demo":"This chain was imported"
 }
 function chainsFlowBadges(m){
 if(!m||!m.hasGraph)return []
 const out=[{cls:"cf-badge-diagram",text:"Diagram",title:"This chain is a flow diagram"+(m.nodes?" ("+m.nodes+" node"+(m.nodes===1?"":"s")+")":"")}]
-if(!m.reviewed)out.push({cls:"cf-badge-ai",text:chainsFlowOrigin(m.aiMade)+" - review",title:(m.aiMade?"An AI client built this chain":"This chain was imported")+" and nobody has reviewed it yet. Review it before running."})
+if(!m.reviewed)out.push({cls:"cf-badge-ai",text:chainsFlowOrigin(m.aiMade,m.origin)+" - review",title:chainsFlowOriginText(m.aiMade,m.origin)+" and nobody has reviewed it yet. Review it before running."})
 return out
 }
 function chainsFlowBadgesHtml(m){
@@ -75,6 +79,23 @@ const list=Array.isArray(templates)?templates:[]
 if(!list.length)return '<div class="cmds-empty-msg">No starter templates.</div>'
 return list.map((t)=>'<div class="cf-tpl'+(current&&current===t.id?" active":"")+'" data-tpl="'+flowEscape(t.id)+'"><div class="cf-tpl-name">'+flowEscape(t.name||t.id)+'</div><div class="cf-tpl-desc">'+flowEscape(t.description||"")+'</div><div class="cf-tpl-actions"><button type="button" class="cf-btn" data-cf-tpl="new" data-id="'+flowEscape(t.id)+'">New chain from this</button><button type="button" class="cf-btn" data-cf-tpl="here" data-id="'+flowEscape(t.id)+'">Use in this diagram</button></div></div>').join("")
 }
+// Pure: the demos whose name, description or tags hold every word of the query (the Chains page search).
+function chainsFlowFilterDemos(demos,query){
+const list=Array.isArray(demos)?demos.filter((d)=>d&&d.id):[]
+const words=String(query||"").trim().toLowerCase().split(/\s+/).filter(Boolean)
+if(!words.length)return list.slice()
+return list.filter((d)=>{const hay=[d.name,d.description].concat(Array.isArray(d.tags)?d.tags:[]).join(" ").toLowerCase();return words.every((w)=>hay.includes(w))})
+}
+// One card per demo. Each is a button: opening it copies the demo into the user's chains.
+function chainsFlowDemosHtml(demos){
+const list=Array.isArray(demos)?demos.filter((d)=>d&&d.id):[]
+if(!list.length)return '<div class="cmds-empty-msg">No demos match.</div>'
+return list.map((d)=>{
+const n=Number(d.node_count)||0
+const tags=(Array.isArray(d.tags)?d.tags:[]).slice(0,4).map((t)=>'<span class="cf-demo-tag">'+flowEscape(t)+"</span>").join("")
+return '<button type="button" class="cf-demo" data-demo="'+flowEscape(d.id)+'" title="Open a copy of this demo in your chains"><span class="cf-demo-name">'+flowEscape(d.name||d.id)+'</span><span class="cf-demo-desc">'+flowEscape(d.description||"")+'</span><span class="cf-demo-foot"><span class="cf-demo-tags">'+tags+'</span><span class="cf-demo-count">'+n+" node"+(n===1?"":"s")+'</span><span class="cf-demo-open">Open a copy</span></span></button>'
+}).join("")
+}
 function chainsFlowHeadState(open){
 const o=open||{}
 const saved=!o.draft&&o.playbookId!==null&&o.playbookId!==undefined
@@ -117,7 +138,7 @@ const open=st.open
 if(open&&!open.draft&&st.meta[String(open.playbookId)]){
 const m=st.meta[String(open.playbookId)]
 open.steps=m.steps
-if(m.hasGraph){open.reviewed=m.reviewed;open.aiMade=m.aiMade}
+if(m.hasGraph){open.reviewed=m.reviewed;open.aiMade=m.aiMade;open.origin=m.origin}
 chainsFlowSyncHead()
 }
 // A diagram chain that was opened as a step list before the index arrived belongs in the editor.
@@ -166,8 +187,6 @@ if(st.mounted)return true
 const host=typeof document!=="undefined"&&document.getElementById?document.getElementById("chainsFlowHost"):null
 if(!host)return false
 st.mounted=true
-const newBtn=document.getElementById("chainsNewDiagramBtn")
-if(newBtn){newBtn.classList.remove("hidden");newBtn.addEventListener("click",()=>chainsFlowNewPrompt())}
 const openBtn=document.getElementById("chainsOpenDiagramBtn")
 if(openBtn){
 openBtn.classList.remove("hidden")
@@ -333,7 +352,7 @@ return Promise.all([bridgeCall("flows.get",[id]),chainsFlowCatalog(),chainsFlowP
 if(token!==st.token)return null
 const data=res[0]||{}
 const m=st.meta[String(data.playbook_id)]
-const open=chainsFlowShow({playbookId:data.playbook_id,name:String(data.name||""),caller:String(data.caller||""),derived:!!data.derived,aiMade:!!data.ai_made,reviewed:data.ai_reviewed!==false,steps:m?m.steps:0},data.graph,{errors:data.errors||[],warnings:data.warnings||[]})
+const open=chainsFlowShow({playbookId:data.playbook_id,name:String(data.name||""),caller:String(data.caller||""),derived:!!data.derived,aiMade:!!data.ai_made,reviewed:data.ai_reviewed!==false,origin:String(data.origin||""),steps:m?m.steps:0},data.graph,{errors:data.errors||[],warnings:data.warnings||[]})
 if(typeof chainsState!=="undefined"){chainsState.currentId=null;chainsState.currentPlaybook=null}
 // A run of this chain that is still going (started by /caller, or before the page was left) shows up again.
 bridgeCall("flows.active_runs").then((rows)=>{
@@ -353,7 +372,7 @@ if(!open||open.draft||open.dirty||open.saving||!st.view||st.view.run.isWatching(
 bridgeCall("flows.get",[open.playbookId]).then((data)=>{
 if(st.open!==open||open.dirty||!data)return
 const probe=chainsFlowGraphSig(flowNormalize(flowClone(data.graph)))
-open.reviewed=data.ai_reviewed!==false;open.aiMade=!!data.ai_made;open.name=String(data.name||open.name);open.caller=String(data.caller||"")
+open.reviewed=data.ai_reviewed!==false;open.aiMade=!!data.ai_made;open.origin=String(data.origin||"");open.name=String(data.name||open.name);open.caller=String(data.caller||"")
 if(probe!==open.sig&&!!data.derived===open.derived){
 st.view.editor.setGraph(data.graph,{keepView:true})
 open.sig=chainsFlowGraphSig(st.view.editor.getGraph())
@@ -386,8 +405,8 @@ $('[data-cf="delete"]').classList.toggle("hidden",!hs.canDelete)
 const banner=$(".cf-banner")
 let html=""
 if(hs.banner==="review"){
-const origin=chainsFlowOrigin(open.aiMade)
-html='<div class="cf-banner-text"><b>'+origin+" - review before running.</b> "+(open.aiMade?"An AI client built this chain.":"This chain came from an import.")+" Open every node and read its commands and scripts. The first run asks you to confirm that you did.</div>"+(open.draft?"":'<button type="button" class="cf-btn" data-cf="reviewed">Mark as reviewed</button>')
+const origin=chainsFlowOrigin(open.aiMade,open.origin)
+html='<div class="cf-banner-text"><b>'+origin+" - review before running.</b> "+chainsFlowOriginText(open.aiMade,open.origin)+"."+(open.origin==="demo"&&!open.aiMade?" The built-in original stays unchanged. Check the target before you run it.":"")+" Open every node and read its commands and scripts. The first run asks you to confirm that you did.</div>"+(open.draft?"":'<button type="button" class="cf-btn" data-cf="reviewed">Mark as reviewed</button>')
 banner.className="cf-banner cf-banner-ai"
 }else if(hs.banner==="derived"){
 html='<div class="cf-banner-text"><b>Linear chain shown as a diagram.</b> Nothing changes until you save. Saving turns it into a diagram chain; its step list is kept, and "Revert to linear" brings it back.</div>'
@@ -507,7 +526,7 @@ const st=chainsFlowState,open=st.open
 if(!open||open.draft)return
 appConfirm("Mark \""+open.name+"\" as reviewed?",{okLabel:"I reviewed it",bodyHtml:"<div>Only do this after reading every command and script in the diagram.</div><div>It becomes a normal chain: the \"review before running\" banner and badge go away and runs no longer ask for the review.</div>"}).then((ok)=>{
 if(!ok||st.open!==open)return
-bridgeCall("flows.mark_reviewed",[open.playbookId]).then(()=>{open.reviewed=true;open.aiMade=false;chainsFlowToast("Marked as reviewed");chainsFlowSyncHead();chainsFlowRefreshIndex()}).catch((err)=>chainsFlowToast(chainsFlowErrorText(err,"Could not mark the chain as reviewed"),"error"))
+bridgeCall("flows.mark_reviewed",[open.playbookId]).then(()=>{open.reviewed=true;open.aiMade=false;open.origin="";chainsFlowToast("Marked as reviewed");chainsFlowSyncHead();chainsFlowRefreshIndex()}).catch((err)=>chainsFlowToast(chainsFlowErrorText(err,"Could not mark the chain as reviewed"),"error"))
 })
 }
 function chainsFlowRevert(){
@@ -641,8 +660,70 @@ appConfirm("Replace this diagram with the template?",{okLabel:"Replace",danger:t
 })
 })
 }
-// New Diagram: name, optional /caller, optional starter template -> flows.create -> open it.
-function chainsFlowNewPrompt(templateId){
+// ---- built-in demos (flow_demos.py). They are shipped in code; opening one copies it into the user's chains as an
+// unreviewed "Demo copy" (flows.create_from_demo), so the originals stay pristine and nothing is stored before that.
+function chainsFlowOpenDemo(demoId){
+const st=chainsFlowState
+if(st.demoBusy)return Promise.resolve(null)
+st.demoBusy=true
+return bridgeCall("flows.create_from_demo",[demoId]).then((res)=>{
+st.demoBusy=false
+if(typeof closeModal==="function")closeModal(true)
+if(typeof acInvalidateCallers==="function")acInvalidateCallers()
+const d=((st.catalog&&st.catalog.demos)||[]).find((x)=>x.id===demoId)
+chainsFlowToast("Copied the demo"+(d?" \""+d.name+"\"":"")+" into your chains. Review it before you run it.")
+st.ids[String(res.playbook_id)]=true
+chainsFlowRefreshIndex()
+if(typeof chainsRefreshList==="function"&&!st.open)chainsRefreshList().then(()=>chainsOpenChain(res.playbook_id))
+else if(typeof chainsOpenChain==="function")chainsOpenChain(res.playbook_id)
+return res
+}).catch((err)=>{st.demoBusy=false;chainsFlowToast(chainsFlowErrorText(err,"Could not open the demo"),"error");return null})
+}
+function chainsFlowDemosBind(root){
+root.addEventListener("click",(e)=>{
+const b=e.target&&e.target.closest?e.target.closest("[data-demo]"):null
+if(b)chainsFlowOpenDemo(b.dataset.demo)
+})
+}
+// The demos gallery (the "Start from a demo" choice of New chain).
+function chainsFlowDemosPrompt(){
+return chainsFlowCatalog().then((catalog)=>{
+const pop=document.createElement("div")
+pop.className="cmds-popover glass-panel cf-dialog cf-gallery cf-demo-gallery"
+pop.setAttribute("role","dialog")
+pop.setAttribute("aria-label","Demo diagrams")
+pop.innerHTML='<div class="cmds-popover-title">Demo diagrams</div><div class="cf-demo-intro">Worked pentest workflows built from the node catalog. Opening one copies it into your chains, marked for review; the built-in original stays unchanged.</div><div class="cf-demo-grid">'+chainsFlowDemosHtml(catalog.demos)+'</div><div class="cmds-popover-actions"><button type="button" data-x="close">Close</button></div>'
+openModal(pop)
+pop.querySelector('[data-x="close"]').addEventListener("click",()=>closeModal())
+chainsFlowDemosBind(pop)
+const first=pop.querySelector(".cf-demo")
+if(first)setTimeout(()=>first.focus(),0)
+return pop
+})
+}
+// Called by chainsRenderList (pages/chains.js) after the cards: the Demos section under the user's chains.
+function chainsFlowDecorateList(wrap,query){
+const st=chainsFlowState
+if(!wrap||!chainsFlowMount())return
+if(!st.catalog){chainsFlowCatalog().then((c)=>{if(c&&Array.isArray(c.demos)&&c.demos.length&&typeof chainsRenderList==="function"&&st.catalog)chainsRenderList()});return}
+const demos=chainsFlowFilterDemos(st.catalog.demos,query)
+if(!demos.length)return
+const sec=document.createElement("section")
+sec.className="cf-demos"+(st.demosCollapsed?" is-collapsed":"")
+sec.setAttribute("aria-label","Demos")
+sec.innerHTML='<div class="cf-demos-head"><button type="button" class="cf-demos-toggle" aria-expanded="'+(st.demosCollapsed?"false":"true")+'"><i class="icon icon-arrow-down"></i><span>Demos</span></button><span class="cf-demos-sub">Built-in example diagrams. Opening one makes a copy in your chains.</span></div><div class="cf-demo-grid">'+chainsFlowDemosHtml(demos)+"</div>"
+sec.querySelector(".cf-demos-toggle").addEventListener("click",(e)=>{
+st.demosCollapsed=!st.demosCollapsed
+sec.classList.toggle("is-collapsed",st.demosCollapsed)
+e.currentTarget.setAttribute("aria-expanded",st.demosCollapsed?"false":"true")
+})
+chainsFlowDemosBind(sec.querySelector(".cf-demo-grid"))
+wrap.appendChild(sec)
+}
+// New Diagram: name, optional /caller, optional starter template -> flows.create -> open it. opts.blank: the "Blank diagram"
+// choice of the New chain chooser, so no template list.
+function chainsFlowNewPrompt(templateId,opts){
+const blank=!!(opts&&opts.blank)
 const st=chainsFlowState
 const ready=typeof acRefreshCallers==="function"?Promise.resolve(acRefreshCallers(true)).catch(()=>{}):Promise.resolve()
 Promise.all([chainsFlowCatalog(),ready]).then((res)=>{
@@ -650,9 +731,9 @@ const templates=Array.isArray(res[0].templates)?res[0].templates:[]
 let picked=templateId&&templates.some((t)=>t.id===templateId)?templateId:""
 const pop=document.createElement("div")
 pop.className="cmds-popover glass-panel cf-dialog cf-new"
-pop.innerHTML='<div class="cmds-popover-title">New Diagram</div><div class="cmds-popover-field"><label>Action chain name</label><input type="text" class="cf-new-name" maxlength="120" autocomplete="off"></div>'+
+pop.innerHTML='<div class="cmds-popover-title">'+(blank?"New blank diagram":"New diagram")+'</div><div class="cmds-popover-field"><label>Chain name</label><input type="text" class="cf-new-name" maxlength="120" autocomplete="off"></div>'+
 '<div class="cmds-popover-field"><label>Caller (optional)</label><div class="cmds-chain-caller"><span class="cmds-chain-caller-slash">/</span><input type="text" class="cf-new-caller" maxlength="32" spellcheck="false" autocomplete="off"></div><div class="cmds-popover-hint">Type it as /caller in the terminal or the AI input to run this chain. Lowercase letters, digits, - and _.</div></div>'+
-'<div class="cmds-popover-field"><label>Start from</label><div class="cf-pick-list"><button type="button" class="cf-pick" data-tpl=""><span class="cf-pick-name">Blank diagram</span><span class="cf-pick-desc">Only a Start node.</span></button>'+templates.map((t)=>'<button type="button" class="cf-pick" data-tpl="'+flowEscape(t.id)+'"><span class="cf-pick-name">'+flowEscape(t.name||t.id)+'</span><span class="cf-pick-desc">'+flowEscape(t.description||"")+"</span></button>").join("")+"</div></div>"+
+(blank?"":'<div class="cmds-popover-field"><label>Start from</label><div class="cf-pick-list"><button type="button" class="cf-pick" data-tpl=""><span class="cf-pick-name">Blank diagram</span><span class="cf-pick-desc">Only a Start node.</span></button>'+templates.map((t)=>'<button type="button" class="cf-pick" data-tpl="'+flowEscape(t.id)+'"><span class="cf-pick-name">'+flowEscape(t.name||t.id)+'</span><span class="cf-pick-desc">'+flowEscape(t.description||"")+"</span></button>").join("")+"</div></div>")+
 '<div class="cmds-popover-error hidden"></div><div class="cmds-popover-actions"><button type="button" data-x="cancel">Cancel</button><button type="button" class="cmds-popover-confirm" data-x="ok">Create</button></div>'
 openModal(pop)
 const nameInput=pop.querySelector(".cf-new-name"),callerInput=pop.querySelector(".cf-new-caller"),err=pop.querySelector(".cmds-popover-error")
@@ -662,7 +743,8 @@ paint()
 let callerEdited=false
 nameInput.addEventListener("input",()=>{if(!callerEdited&&typeof acSlugifyCaller==="function")callerInput.value=acSlugifyCaller(nameInput.value)})
 callerInput.addEventListener("input",()=>{callerEdited=true;callerInput.value=callerInput.value.toLowerCase().replace(/^\//,"")})
-pop.querySelector(".cf-pick-list").addEventListener("click",(e)=>{
+const pickList=pop.querySelector(".cf-pick-list")
+if(pickList)pickList.addEventListener("click",(e)=>{
 const b=e.target.closest&&e.target.closest(".cf-pick")
 if(!b)return
 picked=b.dataset.tpl||""
@@ -941,4 +1023,4 @@ const id=e.detail&&e.detail.id
 if(id!=null&&chainsFlowState.ids[String(id)]&&!chainsFlowState.open)chainsFlowOpen(id)
 })
 }
-if(typeof module!=="undefined"&&module.exports)module.exports={CHAINS_FLOW_PREFS,chainsFlowState,chainsFlowIndex,chainsFlowOrigin,chainsFlowBadges,chainsFlowBadgesHtml,chainsFlowGraphSig,chainsFlowIsBlank,chainsFlowIssueSummary,chainsFlowIssuesHtml,chainsFlowBundle,chainsFlowRunSource,chainsFlowFileName,chainsFlowTemplatesHtml,chainsFlowHeadState,chainsFlowErrorText,chainsFlowViewHtml,chainsFlowCleanSettings,chainsFlowOwnsSave,chainsFlowBridgeMissing,chainsFlowIsCompact,chainsFlowNeedsRefit,chainsFlowRunPath,chainsFlowRunSummary}
+if(typeof module!=="undefined"&&module.exports)module.exports={CHAINS_FLOW_PREFS,chainsFlowState,chainsFlowIndex,chainsFlowOrigin,chainsFlowOriginText,chainsFlowFilterDemos,chainsFlowDemosHtml,chainsFlowBadges,chainsFlowBadgesHtml,chainsFlowGraphSig,chainsFlowIsBlank,chainsFlowIssueSummary,chainsFlowIssuesHtml,chainsFlowBundle,chainsFlowRunSource,chainsFlowFileName,chainsFlowTemplatesHtml,chainsFlowHeadState,chainsFlowErrorText,chainsFlowViewHtml,chainsFlowCleanSettings,chainsFlowOwnsSave,chainsFlowBridgeMissing,chainsFlowIsCompact,chainsFlowNeedsRefit,chainsFlowRunPath,chainsFlowRunSummary}

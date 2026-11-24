@@ -208,6 +208,13 @@
 .flow-empty-hint{position:absolute;left:50%;top:38%;z-index:2;width:min(420px,calc(100% - 40px));transform:translate(-50%,-50%);padding:18px 20px;border-radius:14px;text-align:center;pointer-events:none;border:1px dashed var(--glass-border);background:color-mix(in srgb,var(--flow-float) 70%,transparent)}
 .flow-empty-title{font-size:14px;font-weight:700;margin-bottom:6px}
 .flow-empty-text{font-size:12px;line-height:1.5;color:var(--text-dim)}
+.flow-empty-hint{transition:opacity .6s ease}
+.flow-empty-hint.is-fading{opacity:0}
+.flow-empty-close{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--text-dim);cursor:pointer;pointer-events:auto}
+.flow-empty-close .icon{width:12px;height:12px}
+.flow-empty-close:hover{color:var(--text);border-color:var(--glass-border);background:var(--glass-bg)}
+.flow-empty-close:focus-visible{outline:2px solid var(--accent-a);outline-offset:1px;color:var(--text)}
+@media (prefers-reduced-motion:reduce){.flow-empty-hint{transition:none}}
 
 /* ---- small canvases */
 @container cf-editor (max-width:860px){.flow-hot-label{display:none}.flow-hot{min-width:38px;padding:5px}.flow-hotbar{max-width:calc(100% - 330px)}.flow-tool-text{display:none}.flow-tool-add{padding:0 7px}}

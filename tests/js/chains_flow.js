@@ -35,6 +35,8 @@ appendChild(c){c.parentNode=this;this.children.push(c);return c}
 insertBefore(c,ref){c.parentNode=this;const i=this.children.indexOf(ref);this.children.splice(i<0?this.children.length:i,0,c);return c}
 remove(){if(this.parentNode)this.parentNode.children=this.parentNode.children.filter((x)=>x!==this)}
 addEventListener(t,fn){(this.listeners[t]=this.listeners[t]||[]).push(fn)}
+setAttribute(k,v){(this._attrs=this._attrs||{})[k]=String(v)}
+getAttribute(k){return this._attrs&&k in this._attrs?this._attrs[k]:null}
 removeEventListener(){}
 querySelector(sel){if(!(sel in this._q)){const el=new El("div");el.parentNode=this;this._q[sel]=el}return this._q[sel]}
 querySelectorAll(){return []}
@@ -45,8 +47,8 @@ closest(){return null}
 function makeBox(){
 const ids={}
 const byId=(id)=>ids[id]||(ids[id]=Object.assign(new El("div"),{id:id}))
-;["chainsFlowHost","cmdsPlaybooksWrap","chainsNewDiagramBtn","chainsOpenDiagramBtn","chainsToolbarSlot","cmdsPlaybooksList"].forEach(byId)
-ids.chainsNewDiagramBtn.classList.add("hidden");ids.chainsOpenDiagramBtn.classList.add("hidden");ids.chainsFlowHost.classList.add("hidden")
+;["chainsFlowHost","cmdsPlaybooksWrap","chainsOpenDiagramBtn","chainsToolbarSlot","cmdsPlaybooksList"].forEach(byId)
+ids.chainsOpenDiagramBtn.classList.add("hidden");ids.chainsFlowHost.classList.add("hidden")
 const page=new El("section");page.classList.add("active")
 const docListeners={}
 const calls=[],handlers={},toasts=[],confirms=[]
@@ -150,7 +152,8 @@ T.handlers["flows.save"]=(id)=>{LIST.forEach((r)=>{if(r.playbook_id===id)r.has_g
 const st=T.get("chainsFlowState")
 eq("hook: before the page exists nothing mounts and nothing is taken",(()=>{const B=makeBox();B.ids.chainsFlowHost=null;return [B.box.chainsFlowOpenChain(2),B.get("chainsFlowState").mounted]})(),[false,false])
 check("hook: an unknown chain is left to the step list (and the page gets mounted)",T.box.chainsFlowOpenChain(2)===false&&st.mounted===true)
-check("mount: the two buttons are shown and an Import button is added",!T.ids.chainsNewDiagramBtn.classList.contains("hidden")&&!T.ids.chainsOpenDiagramBtn.classList.contains("hidden")&&T.ids.chainsToolbarSlot.children.length===1&&/Import/.test(T.ids.chainsToolbarSlot.children[0].innerHTML))
+check("mount: no separate New Diagram button is wired any more",!SRC.includes("chainsNewDiagramBtn"))
+check("mount: the Open Diagram button is shown and an Import button is added",!T.ids.chainsOpenDiagramBtn.classList.contains("hidden")&&T.ids.chainsToolbarSlot.children.length===1&&/Import/.test(T.ids.chainsToolbarSlot.children[0].innerHTML))
 await flush(T.box)
 check("mount: flows.list fills the cache and the list is drawn again",st.loaded&&st.ids["2"]===true&&!st.ids["1"]&&T.box.renders>=1)
 eq("mount: catalog and prefs come through the bridge, not localStorage",[T.calls.some((c)=>c[0]==="flows.catalog"),T.calls.some((c)=>c[0]==="flows.prefs_get"),/localStorage|sessionStorage/.test(SRC.replace(/^\/\/.*$/gm,""))],[true,true,false])
@@ -317,6 +320,84 @@ eq("css: every cf- class the view uses is styled",used.filter((c)=>CSS.indexOf("
 check("css: user-select always has its -webkit- twin",(CSS.match(/(?<!-webkit-)user-select:/g)||[]).length===(CSS.match(/-webkit-user-select:/g)||[]).length)
 check("css: glass variants stay in the flow files, glass.css is untouched",/html:where\(\[data-style="glass"\]\) :is\(\.cf-btn/.test(CSS)&&!/\.cf-|\.flow-|\.fi-|\.fr-/.test(GLASS))
 check("line endings: LF only",[SRC,CSS,MAIN,AC,SHORTCUTS,fs.readFileSync(__filename,"utf8")].every((t)=>t.indexOf("\r")<0))
+// ---- demos: origin, badges, filter, cards, opening a copy, the Demos section under the list
+{
+eq("origin: names",[C.chainsFlowOrigin(true,"demo"),C.chainsFlowOrigin(false,"demo"),C.chainsFlowOrigin(false,""),C.chainsFlowOrigin(false),C.chainsFlowOrigin(true)],["AI-made","Demo copy","Imported","Imported","AI-made"])
+eq("origin: sentences",[C.chainsFlowOriginText(false,"demo"),C.chainsFlowOriginText(true,"demo"),C.chainsFlowOriginText(false,"file")],["This chain is a copy of a built-in demo","An AI client built this chain","This chain was imported"])
+const DL=LIST.concat([{playbook_id:5,name:"Demo one",has_graph:true,node_count:9,ai_made:false,ai_reviewed:false,origin:"demo"},{playbook_id:6,name:"Reviewed demo",has_graph:true,ai_reviewed:true,origin:"demo"}])
+const di=C.chainsFlowIndex(DL)
+eq("index: origin is carried, empty when missing",[di.meta["5"].origin,di.meta["6"].origin,di.meta["1"].origin],["demo","demo",""])
+const db=C.chainsFlowBadges(di.meta["5"])
+eq("badges: an unreviewed demo copy says so",db.map((b)=>b.text),["Diagram","Demo copy - review"])
+check("badges: the demo copy title explains it",/^This chain is a copy of a built-in demo and nobody has reviewed it yet/.test(db[1].title)&&db[1].cls==="cf-badge-ai")
+eq("badges: a reviewed demo copy is a plain diagram",C.chainsFlowBadges(di.meta["6"]).map((b)=>b.text),["Diagram"])
+const DEMOS=[{id:"web",name:"Web quick wins",description:"Headers and TLS",tags:["http","tls"],node_count:7},{id:"smb",name:"SMB sweep",description:"Shares and signing",tags:["windows"],node_count:1},null,{name:"no id"}]
+eq("demo filter: blank keeps every demo with an id",C.chainsFlowFilterDemos(DEMOS,"  ").map((d)=>d.id),["web","smb"])
+eq("demo filter: name, description and tags, case-insensitive, every word",[C.chainsFlowFilterDemos(DEMOS,"WEB").map((d)=>d.id),C.chainsFlowFilterDemos(DEMOS,"signing").map((d)=>d.id),C.chainsFlowFilterDemos(DEMOS,"windows").map((d)=>d.id),C.chainsFlowFilterDemos(DEMOS,"tls quick").map((d)=>d.id),C.chainsFlowFilterDemos(DEMOS,"tls smb")],[["web"],["smb"],["smb"],["web"],[]])
+eq("demo filter: null-safe and does not return the input",[C.chainsFlowFilterDemos(null,"x"),C.chainsFlowFilterDemos(undefined,"")],[[],[]])
+const dh=C.chainsFlowDemosHtml(DEMOS)
+eq("demo cards: one button per demo with its data-demo id",(dh.match(/<button type="button" class="cf-demo" data-demo="([^"]+)"/g)||[]).map((x)=>/data-demo="([^"]+)"/.exec(x)[1]),["web","smb"])
+check("demo cards: node count with plural, tags, open label",/>7 nodes</.test(dh)&&/>1 node</.test(dh)&&dh.includes('<span class="cf-demo-tag">http</span>')&&/Open a copy/.test(dh))
+const evil=C.chainsFlowDemosHtml([{id:'x"><img>',name:"<script>a</script>",description:"a & b",tags:["<b>t</b>"]}])
+check("demo cards: id, name, description and tags are escaped",!/<img|<script|<b>/.test(evil)&&evil.includes("&lt;script&gt;")&&evil.includes("a &amp; b")&&evil.includes("&lt;b&gt;t&lt;/b&gt;")&&/data-demo="x&quot;&gt;&lt;img&gt;"/.test(evil))
+check("demo cards: name falls back to the id; empty list says so",/cf-demo-name">bare</.test(C.chainsFlowDemosHtml([{id:"bare"}]))&&/No demos match/.test(C.chainsFlowDemosHtml([]))&&/No demos match/.test(C.chainsFlowDemosHtml(null)))
+// opening a copy
+const D=makeBox()
+D.box.closeModal=(x)=>{D.box.closed=(D.box.closed||[]).concat([x===undefined?null:x])}
+D.handlers["flows.catalog"]=()=>({templates:[],demos:DEMOS.slice(0,2)})
+D.handlers["flows.list"]=()=>LIST
+D.handlers["flows.create_from_demo"]=(id)=>({playbook_id:77,name:"copy of "+id})
+const dst=D.get("chainsFlowState")
+dst.catalog={templates:[],demos:DEMOS.slice(0,2)}
+const p1=D.box.chainsFlowOpenDemo("web"),p2=D.box.chainsFlowOpenDemo("web")
+const [r1,r2]=await Promise.all([p1,p2])
+await flush(D.box)
+eq("open demo: calls flows.create_from_demo once, even when clicked twice",D.calls.filter((c)=>c[0]==="flows.create_from_demo"),[["flows.create_from_demo",["web"]]])
+eq("open demo: resolves with the new chain, the second click with null",[r1&&r1.playbook_id,r2],[77,null])
+check("open demo: closes the gallery, refreshes the list, then opens the copy",JSON.stringify(D.box.closed)==="[true]"&&D.box.refreshes>=1&&JSON.stringify(D.box.opened)==="[77]")
+check("open demo: the toast names the demo and asks for a review",D.toasts.some((t)=>/Copied the demo "Web quick wins"/.test(t[0])&&/Review it before you run it/.test(t[0])))
+check("open demo: no longer busy afterwards",dst.demoBusy===false)
+D.handlers["flows.create_from_demo"]=()=>{throw new Error("no such demo")}
+const r3=await D.box.chainsFlowOpenDemo("gone")
+check("open demo: a failure shows an error toast and frees the button",r3===null&&dst.demoBusy===false&&D.toasts.some((t)=>t[0]==="no such demo"&&t[1]==="error"))
+// with a diagram already open the copy opens directly (the chain list is not on screen)
+const E=makeBox()
+E.handlers["flows.create_from_demo"]=()=>({playbook_id:88})
+E.get("chainsFlowState").open={playbookId:2}
+await E.box.chainsFlowOpenDemo("web")
+check("open demo: with a diagram open it opens the copy without redrawing the list",JSON.stringify(E.box.opened)==="[88]"&&!E.box.refreshes)
+// the Demos section under the list
+const L=makeBox()
+L.handlers["flows.catalog"]=()=>({templates:[],demos:DEMOS.slice(0,2)})
+const wrap=new El("div")
+L.box.chainsFlowDecorateList(wrap,"")
+check("demos section: nothing is added before the catalog has loaded",wrap.children.length===0)
+await flush(L.box)
+check("demos section: the list is drawn again once the catalog has demos",L.box.renders>=1&&!!L.get("chainsFlowState").catalog)
+L.box.chainsFlowDecorateList(wrap,"")
+const sec=wrap.children[0]
+check("demos section: appended under the list as a labelled section",wrap.children.length===1&&sec.tagName==="SECTION"&&sec.classList.contains("cf-demos")&&sec.getAttribute("aria-label")==="Demos")
+check("demos section: has the Demos toggle and every demo card",/class="cf-demos-toggle" aria-expanded="true"/.test(sec.innerHTML)&&/<span>Demos<\/span>/.test(sec.innerHTML)&&(sec.innerHTML.match(/data-demo=/g)||[]).length===2)
+const tog=sec.querySelector(".cf-demos-toggle")
+tog.listeners.click.forEach((fn)=>fn({currentTarget:tog}))
+check("demos section: the toggle collapses it",sec.classList.contains("is-collapsed")&&L.get("chainsFlowState").demosCollapsed===true&&tog._attrs&&tog._attrs["aria-expanded"]==="false")
+const grid=sec.querySelector(".cf-demo-grid")
+L.handlers["flows.create_from_demo"]=()=>({playbook_id:99})
+grid.listeners.click.forEach((fn)=>fn({target:{closest:(sel)=>sel==="[data-demo]"?{dataset:{demo:"smb"}}:null}}))
+await flush(L.box)
+eq("demos section: clicking a card opens a copy of that demo",L.calls.filter((c)=>c[0]==="flows.create_from_demo"),[["flows.create_from_demo",["smb"]]])
+const w2=new El("div");L.box.chainsFlowDecorateList(w2,"smb")
+check("demos section: filtered by the list search",w2.children.length===1&&(w2.children[0].innerHTML.match(/data-demo=/g)||[]).length===1&&/data-demo="smb"/.test(w2.children[0].innerHTML))
+check("demos section: collapsed state is kept on the next render",w2.children[0].classList.contains("is-collapsed")&&/aria-expanded="false"/.test(w2.children[0].innerHTML))
+const w3=new El("div");L.box.chainsFlowDecorateList(w3,"zzz")
+check("demos section: no section when no demo matches",w3.children.length===0)
+const N=makeBox();N.handlers["flows.catalog"]=()=>({templates:[]});N.get("chainsFlowState").catalog={templates:[]}
+const w4=new El("div");N.box.chainsFlowDecorateList(w4,"")
+check("demos section: no section when the catalog has no demos",w4.children.length===0)
+const H=makeBox();H.ids.chainsFlowHost=null;const w5=new El("div");H.box.chainsFlowDecorateList(w5,"")
+check("demos section: nothing before the page exists",w5.children.length===0)
+check("chains.js: the list hook is called with the search",PAGE.includes("chainsFlowDecorateList(wrap,chainsState.search)"))
+}
 console.log("chains_flow: "+passed+" passed, "+failed+" failed")
 process.exit(failed?1:0)
 })().catch((err)=>{console.error(err);process.exit(1)})

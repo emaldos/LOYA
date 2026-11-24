@@ -38,17 +38,17 @@ def has_graph(playbook_id):
     finally:
         con.close()
 def graph_index():
-    """{playbook_id:{"node_count","ai_made","ai_reviewed","updated_at"}} for every chain that has a diagram."""
+    """{playbook_id:{"node_count","ai_made","ai_reviewed","ai_client","updated_at"}} for every chain that has a diagram."""
     con=_con()
     try:
-        rows=con.execute("SELECT playbook_id,graph,ai_made,ai_reviewed,updated_at FROM ChainGraphs").fetchall()
+        rows=con.execute("SELECT playbook_id,graph,ai_made,ai_reviewed,updated_at,ai_client FROM ChainGraphs").fetchall()
     finally:
         con.close()
     out={}
-    for pid,text,ai_made,ai_reviewed,updated in rows:
+    for pid,text,ai_made,ai_reviewed,updated,client in rows:
         try:count=len((json.loads(text) or {}).get("nodes") or [])
         except Exception:count=0
-        out[int(pid)]={"node_count":count,"ai_made":bool(ai_made),"ai_reviewed":bool(ai_reviewed),"updated_at":updated or ""}
+        out[int(pid)]={"node_count":count,"ai_made":bool(ai_made),"ai_reviewed":bool(ai_reviewed),"ai_client":client or "","updated_at":updated or ""}
     return out
 def subchain_refs():
     """{playbook_id:[playbook ids its sub-chain nodes run]} for every stored diagram (cycle detection)."""

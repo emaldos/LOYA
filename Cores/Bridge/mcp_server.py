@@ -212,7 +212,7 @@ def build_server():
         _check("chain_get",locals())
         from Cores.Services import flow_service as _flow_svc
         return _flow_svc.get(chain_id)
-    @server.tool(description="The building blocks for chain diagrams: ready-made template graphs, every node type with its config and output ports, the limits and the JSON Schema of a graph. Read this before chain_create or chain_update.")
+    @server.tool(description="The building blocks for chain diagrams: ready-made template graphs, larger worked demo diagrams (demos: real pentest workflows, each with a sticky note that explains it), every node type with its config and output ports, the limits and the JSON Schema of a graph. Read this before chain_create or chain_update.")
     def chain_templates() -> dict:
         _check("chain_templates",locals())
         from Cores.Services import flow_service as _flow_svc

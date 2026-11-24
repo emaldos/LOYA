@@ -77,7 +77,7 @@ Coverage, before and after S31:
 | CVE | Search the local index, news feed / watchlist | `cve_search`, `cve_feed` | `cve_read` | new |
 | CVE | API key, index update, mark read | - | - | operator only (settings / network) |
 | Action Chains | List, run with approval, status | `chains_list`, `chains_run`, `chains_status` | `chains_read`, `chains_run` (shell) | yes |
-| Chain diagrams | get / templates / create / update / dry run / run / stop | `chain_get`, `chain_templates`, `chain_create`, `chain_update`, `chain_dry_run`, `chain_run`, `chain_run_status`, `chain_run_stop` | `chain_diagrams_*` | yes (Chains team) |
+| Chain diagrams | get / templates and demos / create / update / dry run / run / stop | `chain_get`, `chain_templates`, `chain_create`, `chain_update`, `chain_dry_run`, `chain_run`, `chain_run_status`, `chain_run_stop` | `chain_diagrams_*` | yes (Chains team) |
 | Chain diagrams | Node catalog: the 39 node types by category (paged, filterable), and one type's parameter schema (ports, defaults, fields, options, presets) | `chain_node_types` | `chain_diagrams_read` | new (Chains studio) |
 | Chain diagrams | Validate a graph without saving it | `chain_validate` | `chain_diagrams_read` | new (Chains studio) |
 | Chain diagrams | Node-by-node edits: add a node (or a preset) and connect it, change a node's config / title / position, delete a node, connect or disconnect two nodes | `chain_node_add`, `chain_node_set`, `chain_node_delete`, `chain_connect` | `chain_diagrams_edit` | new (Chains studio; the diagram must validate, the chain becomes AI-made and unreviewed) |
@@ -85,6 +85,8 @@ Coverage, before and after S31:
 | Chain diagrams | Run results: the `results` list (Return result nodes), one node's stdout / stderr / parsed value / variables / HTTP status | `chain_run_status` (now with `results`), `chain_run_output` | `chain_diagrams_read` | new (Chains studio; secrets redacted, values under secret-looking keys hidden, size-capped) |
 | Chain diagrams | Run gate | `chain_run` | `chain_diagrams_run` (shell) | changed (Chains studio): a chain with an HTTP request node or a file node always asks the operator, like a script node; the prompt lists those actions |
 | Chain diagrams | Hot bar pins, canvas layout preferences | - | - | operator only (UI preferences) |
+| Chain diagrams | Built-in demo diagrams (7 worked workflows with sticky notes): read them, adapt one into a new chain | `chain_templates` (`demos` field with each graph), then `chain_create` | `chain_diagrams_read`, `chain_diagrams_add` | new (the AI's copy is AI-made and unreviewed) |
+| Chain diagrams | New chain chooser (Blank diagram, Start from a demo, Start from a template, Simple step list) and opening a demo from the Demos list (`flows.create_from_demo`: copies it into the user's chains as "Demo copy - review", unreviewed like an import) | - | - | operator only (UI; an AI uses `chain_templates` + `chain_create` instead) |
 | Chain history | Run History: list with filters (chain, status, trigger, dates, text), one run with its node timeline, the structured log | `chain_runs_list`, `chain_run_get`, `chain_run_log` | `chain_history_read` | new (after S31; output redacted) |
 | Chain history | Export chains and runs as a versioned bundle | `chain_history_export` | `chain_history_read` | new (after S31; redacted, 4 MB cap) |
 | Chain history | Import a bundle (chains come in AI-made and unreviewed; name and run id collisions: rename, skip or replace) | `chain_history_import` | `chain_history_add` (Ask) | new (after S31) |

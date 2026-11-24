@@ -68,6 +68,13 @@ class FlowsAPI:
         return _flows.import_json(text,name)
     def template(self,template_id):
         return _flows.template(template_id)
+    def demos(self):
+        return _flows.demos()
+    def demo(self,demo_id):
+        return _flows.demo(demo_id)
+    def create_from_demo(self,demo_id,name=None,caller=None):
+        res=_flows.create_from_demo(demo_id,name,caller)
+        return {"playbook_id":res["playbook_id"],"demo_id":res["demo_id"]}
     def plan(self,playbook_id,graph=None,from_node=None):
         return _flows.plan(playbook_id,graph,from_node)
     def run(self,playbook_id,opts=None):

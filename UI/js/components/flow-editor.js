@@ -5,6 +5,9 @@
 // Nothing at the top level of this file touches the DOM, so the pure helpers below are testable in node.
 const FLOW_NS="http://www.w3.org/2000/svg"
 const FLOW_ZOOM_MIN=0.25,FLOW_ZOOM_MAX=2
+// The "Build your workflow" hint on an empty canvas: it fades out by itself after FLOW_HINT_MS and, once closed or faded,
+// stays away for as long as this canvas is open (a new editor, the next new diagram, shows it again).
+const FLOW_HINT_MS=30000,FLOW_HINT_FADE_MS=600
 const FLOW_RUN_STATES=["pending","running","success","fail","skipped","waiting","planned"]
 // What the status pill on a node card says. "warn" = the node failed and the diagram handles it (its fail port is wired).
 const FLOW_RUN_BADGES={pending:{label:"Queued",icon:"clock"},running:{label:"Running",icon:"refresh"},success:{label:"OK",icon:"check"},warn:{label:"Handled",icon:"warning"},fail:{label:"Failed",icon:"close"},skipped:{label:"Skipped",icon:"arrow-right"},waiting:{label:"Waiting",icon:"clipboard-check"},planned:{label:"Planned",icon:"eye-off"}}
@@ -36,7 +39,7 @@ const FLOW_EDITOR_SHORTCUTS=[
 {keys:"Wheel / two-finger scroll",label:"Pan the canvas (Shift+wheel pans sideways)"},
 {keys:"Ctrl+wheel / pinch",label:"Zoom at the cursor"},
 {keys:"Shift+click / Ctrl+click",label:"Add to or remove from the selection"},
-{keys:"Escape",label:"Cancel a drag, or clear the selection"}
+{keys:"Escape",label:"Cancel a drag, clear the selection, or dismiss the empty-canvas hint"}
 ]
 // Node icons: the shapes of Assets/icons/<name>.svg (24x24, stroked), drawn inline so they take the node's colour inside the SVG.
 const FLOW_ICON_SHAPES={
@@ -140,7 +143,8 @@ const caf=win.cancelAnimationFrame?win.cancelAnimationFrame.bind(win):(id)=>win.
 const st={graph:null,view:{x:0,y:0,zoom:1},sel:new Set(),selEdges:new Set(),readOnly:!!opts.readOnly,
 prefs:{snap:!opts.prefs||opts.prefs.snap!==false,grid:(opts.prefs&&Number(opts.prefs.grid)>0)?Number(opts.prefs.grid):20,minimap:!opts.prefs||opts.prefs.minimap!==false,hotbar:flowHotbarClean(opts.prefs&&opts.prefs.hotbar)},pick:null,lastEmpty:0,
 drag:null,box:null,space:false,issues:{nodes:{},edges:{}},run:null,nodeEls:new Map(),edgeEls:new Map(),history:flowHistoryCreate(100),
-lastKey:null,lastT:0,pasteN:0,editing:null,lastClick:null,dragRaf:0,miniRaf:0,mm:null,miniRects:[],destroyed:false,pendingFit:false,palClickAt:0}
+lastKey:null,lastT:0,pasteN:0,editing:null,lastClick:null,dragRaf:0,miniRaf:0,mm:null,miniRects:[],destroyed:false,pendingFit:false,palClickAt:0,
+hint:{dismissed:false,timer:0,fade:0}}
 const cleanup=[]
 const on=(el,type,fn,o)=>{el.addEventListener(type,fn,o);cleanup.push(()=>el.removeEventListener(type,fn,o))}
 const call=(name,...args)=>{const fn=opts[name];if(typeof fn!=="function")return;try{fn(...args)}catch(err){if(win.console)win.console.error("flow editor "+name+" callback failed",err)}}
@@ -171,7 +175,10 @@ const miniSvg=S("svg",{viewBox:"0 0 "+MINI_W+" "+MINI_H,width:MINI_W,height:MINI
 const miniNodes=S("g"),miniView=S("rect",{x:0,y:0,width:0,height:0},"flow-minimap-view")
 miniSvg.appendChild(miniNodes);miniSvg.appendChild(miniView);minimap.appendChild(miniSvg)
 const tip=H("div","flow-tooltip");tip.hidden=true
-const emptyHint=H("div","flow-empty-hint");emptyHint.hidden=true
+const emptyHint=H("div","flow-empty-hint");emptyHint.hidden=true;emptyHint.setAttribute("role","note")
+const hintClose=H("button","flow-empty-close");hintClose.type="button";hintClose.title="Dismiss";hintClose.setAttribute("aria-label","Dismiss")
+hintClose.appendChild(H("i","icon icon-close"))
+emptyHint.appendChild(hintClose)
 emptyHint.appendChild(H("div","flow-empty-title","Build your workflow"))
 emptyHint.appendChild(H("div","flow-empty-text","Press Tab or / to search every node, pick one from the hot bar below, or drag from the Start port and drop on the canvas."))
 const edgeTools=H("div","flow-edge-tools");edgeTools.hidden=true
@@ -502,8 +509,30 @@ root.classList.toggle("is-readonly",st.readOnly)
 const full=st.graph.nodes.length>=FLOW_LIMITS.nodes,hasStart=flowHasStart(st.graph)
 palItems.forEach((b)=>{b.disabled=st.readOnly||full||(b.dataset.type==="start"&&hasStart)})
 hotbar.hidden=st.readOnly
-emptyHint.hidden=st.readOnly||st.graph.nodes.filter((n)=>n.type!=="start").length>0
+syncHint()
 }
+// ---- the empty-canvas hint
+function syncHint(){
+const show=!st.readOnly&&!st.hint.dismissed&&st.graph.nodes.filter((n)=>n.type!=="start").length===0
+if(show){
+emptyHint.hidden=false
+if(!st.hint.timer)st.hint.timer=win.setTimeout(()=>{st.hint.timer=0;dismissHint(true)},FLOW_HINT_MS)
+}else if(!st.hint.fade)emptyHint.hidden=true
+}
+// fade: the 30 s timeout (a gentle fade-out); otherwise (the close button) it goes at once.
+function dismissHint(fade){
+const h=st.hint
+if(h.dismissed||st.destroyed)return
+h.dismissed=true
+if(h.timer){win.clearTimeout(h.timer);h.timer=0}
+if(fade&&!emptyHint.hidden){
+emptyHint.classList.add("is-fading")
+h.fade=win.setTimeout(()=>{h.fade=0;emptyHint.hidden=true;emptyHint.classList.remove("is-fading")},FLOW_HINT_FADE_MS)
+}else emptyHint.hidden=true
+}
+on(hintClose,"pointerdown",(e)=>e.stopPropagation())
+on(hintClose,"click",(e)=>{e.stopPropagation();dismissHint(false);focus()})
+cleanup.push(()=>{if(st.hint.timer)win.clearTimeout(st.hint.timer);if(st.hint.fade)win.clearTimeout(st.hint.fade);st.hint.timer=st.hint.fade=0})
 // ---- minimap
 function scheduleMini(){if(st.miniRaf||st.destroyed||!st.prefs.minimap)return;st.miniRaf=raf(drawMini)}
 function viewRect(box){box=box||stageBox();return {x:st.view.x,y:st.view.y,w:box.w/st.view.zoom,h:box.h/st.view.zoom}}
@@ -1063,6 +1092,7 @@ else if(k==="Escape"){
 if(st.pick){closePicker();done=true}
 else if(st.drag&&st.drag.type!=="mini"){endDrag(null,true);done=true}
 else if(st.sel.size||st.selEdges.size){setSelection([],[]);done=true}
+else if(!emptyHint.hidden&&!st.hint.dismissed){dismissHint(false);done=true}
 }
 else if(k==="Enter"&&!onButton){if(st.sel.size===1){openNode(Array.from(st.sel)[0]);done=true}}
 else if(k===" "&&!onButton){if(!st.space){st.space=true;root.classList.add("is-pan-ready")}done=true}
@@ -1129,6 +1159,6 @@ cleanup.forEach((fn)=>{try{fn()}catch(err){}})
 if(root.parentNode)root.parentNode.removeChild(root)
 }
 setGraph(opts.graph||flowNewGraph())
-return {el:root,getGraph,setGraph,getSelection,select,updateNode,addNodeAt,deleteSelection,copy,cut,paste,duplicate,selectAll,undo,redo,canUndo:()=>st.history.canUndo(),canRedo:()=>st.history.canRedo(),autoLayout,fit,zoomTo,getView:()=>flowClone(st.view),getPrefs,setPrefs:(p)=>{if(!p)return;if(p.snap!=null)st.prefs.snap=!!p.snap;if(Number(p.grid)>0)st.prefs.grid=Number(p.grid);if(p.minimap!=null)st.prefs.minimap=!!p.minimap;if(Array.isArray(p.hotbar)){st.prefs.hotbar=flowHotbarClean(p.hotbar);renderHotbar()}refreshChrome();applyView()},getRunState:()=>st.run,openPicker,closePicker,placeNew,togglePin,setReadOnly,isReadOnly:()=>st.readOnly,setRunState,setIssues,getSelectedEdges:()=>Array.from(st.selEdges),editNote:startNoteEdit,focus,destroy}
+return {el:root,getGraph,setGraph,getSelection,select,updateNode,addNodeAt,deleteSelection,copy,cut,paste,duplicate,selectAll,undo,redo,canUndo:()=>st.history.canUndo(),canRedo:()=>st.history.canRedo(),autoLayout,fit,zoomTo,getView:()=>flowClone(st.view),getPrefs,setPrefs:(p)=>{if(!p)return;if(p.snap!=null)st.prefs.snap=!!p.snap;if(Number(p.grid)>0)st.prefs.grid=Number(p.grid);if(p.minimap!=null)st.prefs.minimap=!!p.minimap;if(Array.isArray(p.hotbar)){st.prefs.hotbar=flowHotbarClean(p.hotbar);renderHotbar()}refreshChrome();applyView()},getRunState:()=>st.run,openPicker,closePicker,placeNew,togglePin,setReadOnly,isReadOnly:()=>st.readOnly,setRunState,setIssues,getSelectedEdges:()=>Array.from(st.selEdges),editNote:startNoteEdit,dismissHint:()=>dismissHint(false),isHintShown:()=>!emptyHint.hidden&&!st.hint.dismissed,focus,destroy}
 }
-if(typeof module!=="undefined"&&module.exports)module.exports={FLOW_RUN_BADGES,flowRunBadgeState,flowPillDuration,FLOW_EDITOR_SHORTCUTS,FLOW_ICON_SHAPES,flowClampZoom,flowViewToScreen,flowViewToWorld,flowViewZoomAt,flowViewPan,flowWheelAction,flowViewFit,flowViewSees,flowBoxRect,flowBoxHits,flowMiniMap,flowMiniToMini,flowMiniToWorld,flowWrapText,flowIssueMap,flowEditorCreate}
+if(typeof module!=="undefined"&&module.exports)module.exports={FLOW_HINT_MS,FLOW_HINT_FADE_MS,FLOW_RUN_BADGES,flowRunBadgeState,flowPillDuration,FLOW_EDITOR_SHORTCUTS,FLOW_ICON_SHAPES,flowClampZoom,flowViewToScreen,flowViewToWorld,flowViewZoomAt,flowViewPan,flowWheelAction,flowViewFit,flowViewSees,flowBoxRect,flowBoxHits,flowMiniMap,flowMiniToMini,flowMiniToWorld,flowWrapText,flowIssueMap,flowEditorCreate}

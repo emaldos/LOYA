@@ -9,6 +9,7 @@ from Cores.Services import flow_schema as _schema
 from Cores.Services import flow_store as _store
 from Cores.Services import flow_engine as _engine
 from Cores.Services import flow_nodes as _nodes
+from Cores.Services import flow_demos as _demos
 from Cores.Services import playbooks_service as _chains
 PREF_DEFAULTS={"snap":True,"grid":20,"minimap":True,"inspector_width":340,"hotbar":list(_nodes.HOTBAR)}
 HOTBAR_MAX=12
@@ -92,7 +93,7 @@ def catalog():
     from Cores.Services import flow_scripts
     try:shells=[{"id":s["id"],"label":s.get("label") or s["id"]} for s in _terminal().list_shells()]
     except Exception:shells=[]
-    return {"schema":_schema.SCHEMA_VERSION,"node_types":copy.deepcopy(_schema.NODE_TYPES),"limits":dict(_schema.LIMITS),"templates":[{"id":t["id"],"name":t["name"],"description":t["description"]} for t in _schema.TEMPLATES],"script_templates":copy.deepcopy(flow_scripts.SCRIPT_TEMPLATES),"languages":flow_scripts.available_languages(),"ops":list(_schema.OPS),"sources":list(_schema.SOURCES),"parsers":list(_schema.PARSE_TOOLS),"shells":shells,"output_actions":list(_schema.OUTPUT_ACTIONS),"severities":list(_schema.SEVERITIES),
+    return {"schema":_schema.SCHEMA_VERSION,"node_types":copy.deepcopy(_schema.NODE_TYPES),"limits":dict(_schema.LIMITS),"templates":[{"id":t["id"],"name":t["name"],"description":t["description"]} for t in _schema.TEMPLATES],"demos":_demos.summaries(),"script_templates":copy.deepcopy(flow_scripts.SCRIPT_TEMPLATES),"languages":flow_scripts.available_languages(),"ops":list(_schema.OPS),"sources":list(_schema.SOURCES),"parsers":list(_schema.PARSE_TOOLS),"shells":shells,"output_actions":list(_schema.OUTPUT_ACTIONS),"severities":list(_schema.SEVERITIES),
             # The node catalog (flow_nodes; the same object as the generated UI/js/components/flow-catalog.js): palette categories,
             # every type with its fields, the palette presets and the default hot bar (the user's pins are in prefs_get()["hotbar"]).
             **{key:value for key,value in _nodes.flow_catalog(_schema.SCHEMA_VERSION).items() if key!="schema"}}
@@ -102,13 +103,13 @@ def list_flows():
     out=[]
     for book in _chains.list_playbooks():
         info=index.get(int(book["id"]))
-        out.append({"playbook_id":book["id"],"name":book["name"],"caller":book.get("caller") or "","step_count":book.get("step_count") or 0,"has_graph":info is not None,"node_count":info["node_count"] if info else (book.get("step_count") or 0)+1,"ai_made":bool(info and info["ai_made"]),"ai_reviewed":bool(info["ai_reviewed"]) if info else True,"updated_at":(info["updated_at"] if info else "") or book.get("updated_at") or ""})
+        out.append({"playbook_id":book["id"],"name":book["name"],"caller":book.get("caller") or "","step_count":book.get("step_count") or 0,"has_graph":info is not None,"node_count":info["node_count"] if info else (book.get("step_count") or 0)+1,"ai_made":bool(info and info["ai_made"]),"ai_reviewed":bool(info["ai_reviewed"]) if info else True,"origin":_origin(info),"updated_at":(info["updated_at"] if info else "") or book.get("updated_at") or ""})
     return out
 def get(playbook_id):
     loaded=_load(playbook_id)
     book,row=loaded["book"],loaded["row"]
     check=_checked(loaded["graph"],book["id"])
-    return {"playbook_id":book["id"],"name":book["name"],"caller":book.get("caller") or "","graph":check["graph"],"derived":loaded["derived"],"ai_made":bool(row and row["ai_made"]),"ai_reviewed":bool(row["ai_reviewed"]) if row else True,"ai_client":(row or {}).get("ai_client") or "","errors":check["errors"],"warnings":check["warnings"]}
+    return {"playbook_id":book["id"],"name":book["name"],"caller":book.get("caller") or "","graph":check["graph"],"derived":loaded["derived"],"ai_made":bool(row and row["ai_made"]),"ai_reviewed":bool(row["ai_reviewed"]) if row else True,"ai_client":(row or {}).get("ai_client") or "","origin":_origin(row),"errors":check["errors"],"warnings":check["warnings"]}
 def validate(graph,playbook_id=None):
     """With playbook_id the checks that need the other chains run too (a sub-chain that leads back to this chain)."""
     return _checked(graph,playbook_id)
@@ -116,6 +117,43 @@ def template(template_id):
     graph=_schema.template(str(template_id or ""))
     if graph is None:raise ValueError("Unknown template.")
     return graph
+# The ai_client value that marks a chain copied from a built-in demo (flow_demos): unreviewed until the operator reviews it.
+DEMO_CLIENT="demo"
+def _origin(row):
+    """Where a diagram came from: "ai" (an AI client built or changed it), "demo" (a copy of a built-in demo), "import" (a
+    chain file) or "" (made here by the operator, or already reviewed)."""
+    if not row:return ""
+    if row.get("ai_made"):return "ai"
+    if row.get("ai_reviewed"):return ""
+    client=str(row.get("ai_client") or "")
+    return "demo" if client==DEMO_CLIENT else "import"
+def demos():
+    return _demos.summaries()
+def demo(demo_id):
+    graph=_demos.demo(str(demo_id or ""))
+    if graph is None:raise ValueError("Unknown demo.")
+    return graph
+def create_from_demo(demo_id,name=None,caller=None):
+    """Copy a built-in demo into the user's chains. The built-in original is never stored or changed; the copy is flagged
+    unreviewed (like an import) so its first run asks the operator to confirm they read it."""
+    entry=next((d for d in _demos.DEMOS if d["id"]==str(demo_id or "")),None)
+    if entry is None:raise ValueError("Unknown demo.")
+    graph=copy.deepcopy(entry["graph"])
+    result=_usable_graph(graph)
+    if not result["ok"]:raise ValueError("The demo is not valid: "+_issue_text(result["errors"]))
+    title=(str(name or "").strip() or entry["name"])[:120]
+    wanted=str(caller or "").strip().lower().lstrip("/") or None
+    if wanted:
+        check=_chains.validate_caller(wanted)
+        if not check.get("ok"):raise ValueError(check.get("error") or "That caller cannot be used.")
+    playbook_id=_chains.create_playbook(title,wanted)
+    try:
+        _store.save_graph(playbook_id,result["graph"],ai_made=False,ai_reviewed=False,ai_client=DEMO_CLIENT,schema_version=_schema.SCHEMA_VERSION)
+    except Exception:
+        _chains.delete_playbook(playbook_id)
+        raise
+    _audit("chain_diagram_create",f"chain {playbook_id} '{title[:120]}' copied from demo {entry['id']}, nodes={len(result['graph']['nodes'])}")
+    return {"playbook_id":playbook_id,"demo_id":entry["id"],"warnings":result["warnings"]}
 # ---- writing -------------------------------------------------------------------------------------------------------
 def create(name,graph=None,caller=None,template_id=None,ai_client=None):
     """New chain with a diagram. ai_client set = made by an AI: stored as ai_made and not yet reviewed."""
@@ -539,7 +577,8 @@ def _ai_graph_schema():
     node["description"]="The config of the node types not spelled out here: chain_node_types with type=<id>."
     return slim
 def ai_templates():
-    return {"templates":[{"id":t["id"],"name":t["name"],"description":t["description"],"graph":copy.deepcopy(t["graph"])} for t in _schema.TEMPLATES],"node_types":{k:{"description":v["description"],"ports":v["ports"],"config":v["defaults"]} for k,v in _schema.NODE_TYPES.items()},"limits":dict(_schema.LIMITS),"graph_schema":_ai_graph_schema(),"notes":"Command lines may use {Placeholders} (filled from the live target) and ${vars} (flow values, shell-quoted). chain_node_types lists the node types by category and, for one type, every config field with its options. A chain you create or change is marked AI-made and the operator must review and approve its first run."}
+    return {"templates":[{"id":t["id"],"name":t["name"],"description":t["description"],"graph":copy.deepcopy(t["graph"])} for t in _schema.TEMPLATES],
+            "demos":[{"id":d["id"],"name":d["name"],"description":d["description"],"tags":list(d["tags"]),"graph":copy.deepcopy(d["graph"])} for d in _demos.DEMOS],"node_types":{k:{"description":v["description"],"ports":v["ports"],"config":v["defaults"]} for k,v in _schema.NODE_TYPES.items()},"limits":dict(_schema.LIMITS),"graph_schema":_ai_graph_schema(),"notes":"Command lines may use {Placeholders} (filled from the live target) and ${vars} (flow values, shell-quoted). chain_node_types lists the node types by category and, for one type, every config field with its options. A chain you create or change is marked AI-made and the operator must review and approve its first run."}
 def ai_create(name,graph,caller="",client=""):
     return create(name,graph,(caller or None),ai_client=str(client or "AI"))
 def ai_update(playbook_id,graph,name="",client=""):

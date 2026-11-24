@@ -2,7 +2,7 @@
 name: loya-chains
 description: Use and build LOYA Action Chains - multi-step flows of commands, HTTP requests, parsers, loops and branches - list and run existing chains with approval, build and validate chain diagrams for the operator to review, and read run results. Use for repeatable recon or post-exploitation workflows.
 ---
-<!-- loya-skill-version: 3 -->
+<!-- loya-skill-version: 4 -->
 # Action Chains
 
 An Action Chain is a saved flow of command steps that LOYA runs in the terminal. The operator can also start it from the AI panel by typing `/<caller>`.
@@ -14,7 +14,7 @@ An Action Chain is a saved flow of command steps that LOYA runs in the terminal.
 
 ## Build a chain diagram
 A diagram is a graph of nodes joined by edges. The tool descriptions are the authoritative schema; read them first. If these tools are not in your tool list, the operator's LOYA does not have them yet: describe the flow in words instead.
-- catalog: `chain_node_types` (the node types; with `type=<id>` the full config fields of one type), `chain_templates` (ready-made graphs, limits)
+- catalog: `chain_node_types` (the node types; with `type=<id>` the full config fields of one type), `chain_templates` (ready-made graphs, worked demo diagrams, limits)
 - reading: `chain_get`, `chain_validate(graph)` (check without saving), `chain_dry_run`, `chain_run_status`, `chain_run_output`
 - creating and editing: `chain_create(name, graph, caller)`, `chain_update(chain_id, graph)` (replaces the whole diagram), and the small edits `chain_node_add`, `chain_node_set`, `chain_node_delete`, `chain_connect`
 - running: `chain_run(chain_id, reason)`, `chain_run_stop(run_id)`
@@ -48,13 +48,24 @@ A node whose port is named fail or error takes that port when it fails. If nothi
 - A math node: `"expr":"(open * 100) / total"` with + - * / // % ** and the functions min max abs round floor ceil sqrt len sum int float.
 - To collect results from a loop, end the item path in a merge node (`mode:"any"`) and read its variable after the loop's done port.
 
+### Demo diagrams
+`chain_templates` also returns `demos`: larger worked diagrams that ship with LOYA, as `[{"id","name","description","tags","graph"}]`. Each has a sticky note that explains it. They are built in: nothing is stored until the operator opens one from Chains > New chain > Start from a demo (or the Demos list), which copies it into their chains marked "Demo copy - review", unreviewed like an import.
+- Read a demo's `graph` as a worked example of how the node types fit together, then adapt it (targets, commands, names) and save your version with `chain_create`. The result is AI-made and unreviewed as usual.
+- `nmap-host-triage`: nmap XML scan of the live target; web services become findings, other ports go to an inventory note.
+- `http-status-switch`: request a list of URLs and route each answer by status code with a switch.
+- `subdomain-probe`: split, dedupe and sort a pasted subdomain list, probe each over HTTPS and report the live ones.
+- `cve-for-services`: version scan, offline CVE index lookup per service, finding drafts for the matches.
+- `target-update-approval`: read the HTTP Server header and, after an approval node, store it on the target.
+- `scan-analysis-summary`: count hosts, ports and services in a saved nmap scan (or a built-in sample) and write a summary note.
+- `logic-math-tour`: no-network tour of loops, variables, math, merge, wait, JSON, decisions and error ports.
+
 ### Layout
 - Lay the diagram out left to right: add about 300 to `x` for each step, and about 160 to `y` for each parallel branch. Keep the main path on one row (`y` 160), with failure paths below it.
 - Give every node a short `title` that says what it does ("Scan top ports", not "command").
 - Put a `comment` node above each stage of a long diagram (about 60 above the row, `w` 260, `h` 80).
 
 ### Workflow
-1. Read `chain_node_types` for the types you plan to use. Start from `chain_templates` when one is close.
+1. Read `chain_node_types` for the types you plan to use. Start from a template or a demo in `chain_templates` when one is close.
 2. Build the whole graph and check it with `chain_validate`. Fix every error; read the warnings (an unreachable node, an unconnected fail port).
 3. Save it with `chain_create`, or change an existing chain with `chain_update` or the small edit tools.
 4. Run `chain_dry_run`. It executes nothing and shows each command and what the HTTP, file and app nodes would do.
