@@ -1,4 +1,4 @@
-import asyncio,hmac,json,secrets,threading,time,urllib.request,urllib.error
+import asyncio,hmac,json,os,secrets,socket,threading,time,urllib.request,urllib.error
 from urllib.parse import urlsplit
 from Cores.Services import ai_service as _ai_svc
 DEFAULT_PORT=8765
@@ -247,31 +247,74 @@ def build_app(port=None):
 def _build_uvicorn(port):
     import uvicorn
     return uvicorn.Server(uvicorn.Config(build_app(port),host="127.0.0.1",port=port,log_level="warning",lifespan="on"))
+_last_error={"text":""}
 def _serve(server):
+    # uvicorn reports a failed bind with sys.exit(1): caught here, so it ends this thread only, never the app.
     try:asyncio.run(server.serve())
-    except BaseException:pass
+    except BaseException as e:
+        _last_error["text"]=f"{type(e).__name__}: {e}" if not isinstance(e,SystemExit) else "the server could not bind its port"
+def _port_free(port):
+    """True when 127.0.0.1:<port> can be bound now (same SO_REUSEADDR rule uvicorn uses on POSIX)."""
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    try:
+        if os.name!="nt":s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        s.bind(("127.0.0.1",int(port)))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+AUTO_PORT_TRIES=20
+def _auto_port(skip=()):
+    """The default port when it is free, else the next free one, else one the OS picks. Another LOYA NG instance (or any
+    other program) on 8765 must not stop this one: connected CLIs read the port from their connection file."""
+    for p in range(DEFAULT_PORT,DEFAULT_PORT+AUTO_PORT_TRIES):
+        if p not in skip and _port_free(p) and not _http_reachable(p):return p  # Windows lets a 127.0.0.1 bind shadow a 0.0.0.0 listener
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1",0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
+# Starting is serialized: two callers at once (the CLI autostart thread and a Connect) must share one server, not race
+# to start a second one on the same port.
+_start_lock=threading.RLock()
 def start_server(port=None,register_provider=True):
-    global _server,_thread,_port,_main_token
-    with _lock:
+    """port=None picks a free port (8765 first). An explicit port must be free, or this raises RuntimeError.
+    Never raises anything else and never ends the process; a failed start leaves no server behind."""
+    with _start_lock:
         if is_running():
             return status()
-        port=int(port or DEFAULT_PORT)
-        if _http_reachable(port):raise RuntimeError(f"Port {port} is already in use - another MCP server (or another app) is listening there.")
+        explicit=port is not None
+        tried=[]
+        for attempt in range(1 if explicit else 3):
+            p=int(port) if explicit else _auto_port(tried)
+            tried.append(p)
+            if explicit and (_http_reachable(p) or not _port_free(p)):
+                raise RuntimeError(f"Port {p} is already in use - another MCP server (or another app) is listening there.")
+            if _try_start(p):
+                if register_provider:_ai_svc.set_provider("mcp",{"url":_local_url(p),"enabled":True})
+                return status()
+        why=_last_error["text"]
+        raise RuntimeError(f"Local MCP server did not start on port {tried[-1]}"+(f" ({why})." if why else "."))
+def _try_start(port):
+    global _server,_thread,_port,_main_token
+    _last_error["text"]=""
+    try:server=_build_uvicorn(port)
+    except Exception as e:
+        _last_error["text"]=f"{type(e).__name__}: {e}"
+        return False
+    with _lock:
         with _tokens_lock:_main_token=_new_token()
-        server=_build_uvicorn(port)
         thread=threading.Thread(target=_serve,args=(server,),name="loya-mcp-http",daemon=True)
         thread.start()
         _server,_thread,_port=server,thread,port
-    ok=False
     for _ in range(40):
-        if server.started:ok=True;break
+        if server.started:return True
         if not thread.is_alive():break
         time.sleep(0.25)
-    if not ok:
-        stop_server()
-        raise RuntimeError(f"Local MCP server did not start on port {port}.")
-    if register_provider:_ai_svc.set_provider("mcp",{"url":_local_url(port),"enabled":True})
-    return status()
+    stop_server()
+    return False
 def stop_server():
     global _server,_thread,_port,_main_token
     with _lock:

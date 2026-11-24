@@ -6,7 +6,7 @@ const source=fs.readFileSync(path.join(ROOT,"UI","js","components","ext-connecti
 const start=source.indexOf("// ---- conn pure start")
 const end=source.indexOf("// ---- conn pure end")
 if(start<0||end<start)throw new Error("could not find the pure helpers in ext-connections.js")
-const api=new Function(source.slice(start,end)+"\nreturn {CONN_TOOLS,CONN_STEPS,connSigninPill,connLinkPill,connPickShell,connStepsText,connCommandFor,connPickMethod,connStepDone,connResumeIndex,connResumeStart,connRunWizard}")()
+const api=new Function(source.slice(start,end)+"\nreturn {CONN_TOOLS,CONN_STEPS,connSigninPill,connLinkPill,connPickShell,connStepsText,connCommandFor,connPickMethod,connStepDone,connResumeIndex,connResumeStart,connRunWizard,connJobRun,connCancelToken,connIsCancel,CONN_CANCELLED}")()
 const html=fs.readFileSync(path.join(ROOT,"UI","pages","settings.html"),"utf8")
 const settingsJs=fs.readFileSync(path.join(ROOT,"UI","js","pages","settings.js"),"utf8")
 const mainHtml=fs.readFileSync(path.join(ROOT,"UI","windows","main.html"),"utf8")
@@ -130,7 +130,97 @@ eq("then cancel at sign-in",r.index,3)
 })())
 // Install never runs from the card without the assistant; the confirm is per step.
 check("install runs only from the assistant's install action",(source.match(/connection_install_command|connection_install_os/g)||[]).length===2&&/install:\(\)=>\{/.test(source))
-check("Esc handled as cancel",/confirmTrapKey\(e,box,\(\)=>answer&&answer\("cancel"\)\)/.test(source))
+check("Esc handled as cancel",/confirmTrapKey\(e,box,cancel\)/.test(source)&&/const cancel=\(\)=>\{if\(answer\)\{answer\("cancel"\);return\}if\(running\)running\.cancel\(\)\}/.test(source))
+// ---- regression (frozen dialog): Cancel is never disabled, every CLI step is a polled job, every step shows a running state
+check("Cancel is never disabled while a step runs",!/cancelBtn\.disabled=true/.test(source)&&/cancelBtn\.addEventListener\("click",cancel\)/.test(source))
+check("no step waits on a direct CLI bridge call",!/bridgeCall\("extAgents\.connection_(connect|test|detect|status|disconnect)"/.test(source)&&!/bridgeCall\("extAgents\.connections"\)/.test(source))
+check("verify, connect and test run as jobs with a running state",/verify:\(\)=>job\("detect"/.test(source)&&/connect:\(\)=>job\("connect"/.test(source)&&/test:\(\)=>job\("test"/.test(source)&&/const status=\(\)=>job\("status"/.test(source))
+check("running state has a spinner and elapsed time",/conn-wiz-spin/.test(source)&&/conn-wiz-elapsed/.test(source))
+check("no ellipsis or long dashes in UI text",!/\.\.\.|…|–|—|·/.test(source))
+// connJobRun against a fake bridge: start returns at once, polls until done.
+function fakeBridge(script){
+const calls=[]
+let polls=0
+const call=(path,args)=>{calls.push(path.split(".").pop()+(args&&args[0]!==undefined?":"+args[0]:""))
+if(path.endsWith("job_start"))return Promise.resolve(script.start===undefined?{job:"j1"}:script.start)
+if(path.endsWith("job_poll")){polls++;return Promise.resolve(script.poll(polls))}
+if(path.endsWith("job_cancel"))return Promise.resolve({cancelled:true})
+return Promise.reject(new Error("unexpected "+path))}
+return {call,calls}
+}
+const fast={sleep:()=>Promise.resolve(),every:1}
+tests.push((async()=>{
+const b=fakeBridge({poll:(n)=>n<4?{done:false,elapsed:n}:{done:true,ok:true,result:{connected:true,message:"ok"}}})
+const ticks=[]
+const r=await api.connJobRun(b.call,"connect","claude_code",Object.assign({onTick:(p)=>ticks.push(p.done)},fast))
+eq("job: result after polling",r,{connected:true,message:"ok"})
+eq("job: started once, polled until done",b.calls,["connection_job_start:connect","connection_job_poll:j1","connection_job_poll:j1","connection_job_poll:j1","connection_job_poll:j1"])
+eq("job: every poll reported",ticks,[false,false,false,true])
+})())
+tests.push((async()=>{
+const b=fakeBridge({poll:()=>({done:true,ok:false,error:"Claude Code could not add LOYA NG's MCP server: boom"})})
+let err=null
+try{await api.connJobRun(b.call,"connect","claude_code",fast)}catch(e){err=e}
+eq("job: backend error is raised with its text",err&&err.message,"Claude Code could not add LOYA NG's MCP server: boom")
+})())
+// A hung CLI: polls never finish. Cancel stops waiting at once and asks the backend to stop the job.
+tests.push((async()=>{
+const b=fakeBridge({poll:()=>({done:false})})
+const tok=api.connCancelToken()
+let n=0
+const p=api.connJobRun(b.call,"test","claude_code",{token:tok,every:1,sleep:()=>{n++;if(n===5)tok.cancel();return new Promise((r)=>setTimeout(r,1))}})
+let err=null
+try{await p}catch(e){err=e}
+eq("hung step: Cancel ends the wait",api.connIsCancel(err),true)
+await new Promise((r)=>setTimeout(r,5))
+check("hung step: backend told to cancel the job",b.calls.includes("connection_job_cancel:j1"),JSON.stringify(b.calls))
+})())
+// A bridge call that never answers at all: Cancel still works (the wait is raced against the cancel token).
+tests.push((async()=>{
+const tok=api.connCancelToken()
+const call=(path)=>path.endsWith("job_start")?Promise.resolve({job:"j9"}):path.endsWith("job_cancel")?Promise.resolve({}):new Promise(()=>{})
+const p=api.connJobRun(call,"status","claude_code",{token:tok,every:1})
+setTimeout(()=>tok.cancel(),10)
+let err=null
+try{await p}catch(e){err=e}
+eq("never-answering poll: Cancel still ends the wait",api.connIsCancel(err),true)
+})())
+// The flow: a step cancelled while running ends as cancelled+running; nothing after it runs.
+tests.push((async()=>{
+const ran=[]
+const o={start:4,status:()=>Promise.resolve(INST),ask:()=>Promise.resolve("approve"),act:{connect:()=>{ran.push("connect");return Promise.reject(api.CONN_CANCELLED)},test:()=>{ran.push("test");return {ok:true}}}}
+const r=await api.connRunWizard(o)
+eq("cancel mid-step: cancelled while running at connect",[r.cancelled,r.running,r.index],[true,true,4])
+eq("cancel mid-step: test never ran",ran,["connect"])
+})())
+// Connect advances to the test, with the connect result shown on the next step.
+tests.push((async()=>{
+const asked=[]
+let connected=false
+const o={start:4,status:()=>Promise.resolve(connected?CONN:SIGNED),ask:(v)=>{asked.push([v.step.id,v.info||""]);return Promise.resolve(asked.length<2?"approve":"cancel")},
+act:{connect:()=>{connected=true;return {info:"Claude Code is connected."}}}}
+const r=await api.connRunWizard(o)
+eq("connect advances to test with its result",asked,[["connect",""],["test","Claude Code is connected."]])
+eq("then cancel at test",r.index,5)
+})())
+// A failing step is shown on the same step (not swallowed); Approve tries again.
+tests.push((async()=>{
+const asked=[]
+let tries=0
+const o={start:4,status:()=>Promise.resolve(tries>1?CONN:SIGNED),ask:(v)=>{asked.push([v.step.id,v.note||""]);return Promise.resolve(asked.length<3?"approve":"cancel")},
+act:{connect:()=>{tries++;if(tries===1)return Promise.reject(new Error("LOYA NG's MCP server did not start"));return null}}}
+await api.connRunWizard(o)
+eq("error shown on the step, then retried",asked,[["connect",""],["connect","LOYA NG's MCP server did not start"],["test",""]])
+})())
+// A status check that fails is shown too, and cancelling a running status check ends the flow.
+tests.push((async()=>{
+const asked=[]
+let n=0
+const o={start:3,status:()=>{n++;return n===1?Promise.reject(new Error("timed out")):Promise.reject(api.CONN_CANCELLED)},ask:(v)=>{asked.push([v.step.id,!!v.statusFailed,v.note]);return Promise.resolve("approve")},act:{}}
+const r=await api.connRunWizard(o)
+eq("failed status shown",asked,[["signin",true,"timed out"]])
+eq("cancelled status check ends as running cancel",[r.cancelled,r.running],[true,true])
+})())
 check("focus goes to the primary button",/\(okBtn\.disabled\?cancelBtn:okBtn\)\.focus\(\)/.test(source))
 check("new UI text says LOYA NG",!/LOYA Note NG/.test(source))
 Promise.all(tests).then(()=>{

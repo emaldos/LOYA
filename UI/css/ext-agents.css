@@ -75,3 +75,10 @@
 .conn-wiz-method.off{opacity:.75;cursor:default}
 .conn-wiz-method input{margin-top:3px}
 .conn-wiz .confirm-actions button:disabled{opacity:.45;cursor:not-allowed}
+.conn-wiz-running{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:1px solid var(--accent-a);background:var(--accent-a-soft);color:var(--text);font-size:12px}
+.conn-wiz-spin{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent-a) 30%,transparent);border-top-color:var(--accent-a);animation:conn-spin .8s linear infinite}
+.conn-wiz-elapsed{margin-left:auto;color:var(--text-dim);font-variant-numeric:tabular-nums}
+.conn-wiz-ok{color:#22c55e}
+[data-theme="light"] .conn-wiz-ok{color:#15803d}
+@keyframes conn-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.conn-wiz-spin{animation:none;border-top-color:var(--accent-a)}}

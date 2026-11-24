@@ -63,23 +63,78 @@ const s=connResumeIndex(st)
 if(typeof last!=="number"||last<=s)return s
 return st&&st.installed?Math.min(last,CONN_STEPS.length-1):Math.min(last,2)
 }
+// ---- background steps
+// Every CLI call (and the MCP server start) is a backend job: the start call returns at once, then short polls follow,
+// so a slow or hung CLI never holds a bridge call and the page stays usable. Cancel stops waiting at once.
+const CONN_CANCELLED={cancelled:true}
+function connIsCancel(e){return e===CONN_CANCELLED||!!(e&&e.cancelled===true&&!e.message)}
+function connErrText(e){return e&&e.message?e.message:String(e||"Failed")}
+function connCancelToken(){
+let fire=null
+const t={cancelled:false}
+t.promise=new Promise((r)=>{fire=r})
+t.cancel=()=>{if(!t.cancelled){t.cancelled=true;fire(CONN_CANCELLED)}}
+return t
+}
+// call(path,args) is bridgeCall. o.token (connCancelToken) cancels; o.onTick(poll) sees each poll; o.every: poll period ms.
+// Resolves the step's result; rejects an Error with the backend's message, or CONN_CANCELLED.
+async function connJobRun(call,kind,tool,o){
+o=o||{}
+const tok=o.token||connCancelToken()
+const sleep=o.sleep||((ms)=>new Promise((r)=>setTimeout(r,ms)))
+const race=(p)=>Promise.race([Promise.resolve(p),tok.promise])
+if(tok.cancelled)throw CONN_CANCELLED
+const startP=Promise.resolve(call("extAgents.connection_job_start",[kind,tool]))
+const started=await race(startP)
+if(started===CONN_CANCELLED){startP.then((s)=>s&&s.job&&call("extAgents.connection_job_cancel",[s.job])).catch(()=>{});throw CONN_CANCELLED}
+const id=started&&started.job
+if(!id)throw new Error("The step did not start.")
+for(;;){
+const r=await race(Promise.resolve(sleep(o.every||300)).then(()=>tok.cancelled?CONN_CANCELLED:call("extAgents.connection_job_poll",[id])))
+if(r===CONN_CANCELLED){
+// Tell the backend first (bounded: a stuck bridge never holds Cancel up), so a step started next sees it cancelled.
+await Promise.race([Promise.resolve(call("extAgents.connection_job_cancel",[id])).catch(()=>{}),sleep(1500)])
+throw CONN_CANCELLED
+}
+if(o.onTick)try{o.onTick(r||{})}catch(e){}
+if(!r||!r.done)continue
+if(r.cancelled)throw CONN_CANCELLED
+if(r.ok===false)throw new Error(r.error||"Failed")
+return r.result
+}
+}
 // The flow. o.ask(view) resolves "approve" or anything else (= Cancel). o.act[id](status) runs a step and may return
-// {retry:true} (ask the same step again, e.g. the install is not finished yet) or {stop:true}. Nothing runs without "approve".
+// {retry:true} (ask the same step again, e.g. the install is not finished yet), {stop:true}, or {info} (a result line shown
+// on the next step). Nothing runs without "approve". A step or status check that fails is shown on the same step (Approve
+// tries again); one cancelled while it runs (rejects CONN_CANCELLED) ends the flow as {cancelled, running:true}.
 async function connRunWizard(o){
 let i=Math.max(0,Math.min(CONN_STEPS.length-1,o.start||0))
-let note=""
+let note="",info="",st=null
 while(i<CONN_STEPS.length){
 const step=CONN_STEPS[i]
-const st=await o.status()
+let failed=""
+try{st=await o.status()}
+catch(e){if(connIsCancel(e))return {cancelled:true,running:true,index:i};failed=connErrText(e)}
+if(failed){
+const a=await o.ask({index:i,step,status:st||{},done:false,note:failed,info:"",statusFailed:true})
+if(a!=="approve")return {cancelled:true,index:i}
+continue
+}
 const done=connStepDone(step.id,st)
-const answer=await o.ask({index:i,step,status:st,done,note})
-note=""
+const answer=await o.ask({index:i,step,status:st,done,note,info})
+note="";info=""
 if(answer!=="approve")return {cancelled:true,index:i}
 if(!done){
-const r=(await o.act[step.id](st))||{}
+let r
+try{r=(await o.act[step.id](st))||{}}
+catch(e){
+if(connIsCancel(e))return {cancelled:true,running:true,index:i}
+note=connErrText(e);continue
+}
 if(r.stop)return {stopped:true,index:i,message:r.message||""}
 if(r.retry){note=r.message||"";continue}
 if(step.id==="test")return {done:true,index:i,result:r}
+info=r.info||""
 }
 i++
 }
@@ -94,8 +149,8 @@ function connMountSettings(root){
 root=root||document.getElementById("setExtConnectionsRoot")
 if(!root)return Promise.resolve()
 connState.root=root
-if(!root.innerHTML)root.innerHTML='<div class="set-status">Looking for Claude Code and Codex...</div>'
-return bridgeCall("extAgents.connections").then((ov)=>{connState.overview=ov;connRender(root,ov)}).catch((err)=>{root.innerHTML=`<div class="set-status error">${connEsc(connErr(err))}</div>`})
+if(!root.innerHTML)root.innerHTML='<div class="set-status">Looking for Claude Code and Codex</div>'
+return connJobRun(bridgeCall,"overview",null).then((ov)=>{connState.overview=ov;connRender(root,ov)}).catch((err)=>{root.innerHTML=`<div class="set-status error">${connEsc(connErr(err))}</div>`})
 }
 function connStatus(tool,msg,isError,steps){
 const el=connState.root&&connState.root.querySelector(`.conn-status[data-tool="${tool}"]`)
@@ -211,25 +266,28 @@ connStatus(tool,st&&st.installed?"Found "+st.label+". Next: Sign in, then Connec
 on(".conn-docs",(tool)=>bridgeCall("notes.open_url",[connState.overview.tools[tool].docs]))
 on(".conn-signin",connSignIn)
 on(".conn-connect",(tool)=>{
-connStatus(tool,"Connecting...",false)
-return bridgeCall("extAgents.connection_connect",[tool]).then((r)=>connAfter(tool,r,"Connected."))
+connStatus(tool,"Connecting: starting LOYA NG's MCP server and registering it in the CLI",false)
+return connJobRun(bridgeCall,"connect",tool).then((r)=>connAfter(tool,r,"Connected."))
 })
 on(".conn-disconnect",(tool)=>{
 const st=connState.overview.tools[tool]
 return appConfirm("Disconnect "+st.label+" from LOYA NG? This removes the loya-note MCP server from its config, revokes its token and removes the LOYA skills you have not edited.",{okLabel:"Disconnect",danger:true}).then((yes)=>{
 if(!yes)return null
-return bridgeCall("extAgents.connection_disconnect",[tool]).then((r)=>connAfter(tool,r,"Disconnected."))
+connStatus(tool,"Disconnecting",false)
+return connJobRun(bridgeCall,"disconnect",tool).then((r)=>connAfter(tool,r,"Disconnected."))
 })
 })
 on(".conn-test",(tool)=>{
-connStatus(tool,"Testing...",false)
-return bridgeCall("extAgents.connection_test",[tool]).then((r)=>connStatus(tool,r.message,!r.ok,r.steps))
+connStatus(tool,"Testing the connection",false)
+return connJobRun(bridgeCall,"test",tool).then((r)=>connStatus(tool,r.message,!r.ok,r.steps))
 })
 on(".conn-wizard",(tool)=>connWizard(tool))
 root.querySelectorAll(".conn-copy").forEach((b)=>b.addEventListener("click",()=>connCopy(b.dataset.copy)))
 root.querySelectorAll(".conn-link").forEach((b)=>b.addEventListener("click",()=>bridgeCall("notes.open_url",[b.dataset.url]).catch(()=>{})))
 }
 // ---------------------------------------------------------------- setup assistant (modal, one Approve per step)
+// While a step runs the dialog shows it (spinner, text, seconds) and Cancel stays live: it stops waiting at once and the
+// backend stops the CLI. Errors stay on the step, with Approve to try again.
 function connWizard(tool){
 if(connState.wizardOpen)return Promise.resolve()
 const st0=connState.overview.tools[tool]
@@ -254,60 +312,97 @@ connState.wizardOpen=true
 const bodyEl=box.querySelector(".conn-wiz-body")
 const okBtn=box.querySelector(".confirm-ok")
 const cancelBtn=box.querySelector(".confirm-cancel")
-let answer=null
-const onKey=(e)=>{if(typeof confirmTrapKey==="function")confirmTrapKey(e,box,()=>answer&&answer("cancel"));else if(e.key==="Escape"){e.preventDefault();answer&&answer("cancel")}}
+let answer=null   // set while a step waits for Approve / Cancel
+let running=null  // the cancel token of what is running now
+const cancel=()=>{if(answer){answer("cancel");return}if(running)running.cancel()}
+const onKey=(e)=>{if(typeof confirmTrapKey==="function")confirmTrapKey(e,box,cancel);else if(e.key==="Escape"){e.preventDefault();cancel()}}
 document.addEventListener("keydown",onKey,true)
 okBtn.addEventListener("click",()=>answer&&answer("approve"))
-cancelBtn.addEventListener("click",()=>answer&&answer("cancel"))
-const close=()=>{document.removeEventListener("keydown",onKey,true);overlay.remove();connState.wizardOpen=false;if(before&&before.focus)try{before.focus()}catch(e){}}
+cancelBtn.addEventListener("click",cancel)
+const close=()=>{if(running)running.cancel();document.removeEventListener("keydown",onKey,true);overlay.remove();connState.wizardOpen=false;if(before&&before.focus)try{before.focus()}catch(e){}}
 const markSteps=(index,status)=>box.querySelectorAll(".conn-wiz-steps li").forEach((li)=>{
 const i=Number(li.dataset.i)
 li.classList.toggle("current",i===index)
 li.classList.toggle("done",i<index||(i!==index&&connStepDone(CONN_STEPS[i].id,status)))
 if(i===index)li.setAttribute("aria-current","step");else li.removeAttribute("aria-current")
 })
-const status=()=>bridgeCall("extAgents.connection_status",[tool]).then((st)=>{connState.overview.tools[tool]=st;return st})
+// The running state: spinner, what is happening and for how long. Approve is off, Cancel stays on.
+const busy=(text)=>{
+const tok=connCancelToken()
+running=tok
+okBtn.disabled=true;cancelBtn.disabled=false
+const el=document.createElement("div")
+el.className="conn-wiz-running";el.setAttribute("role","status")
+el.innerHTML=`<span class="conn-wiz-spin" aria-hidden="true"></span><span class="conn-wiz-running-text">${connEsc(text)}</span><span class="conn-wiz-elapsed">0 s</span>`
+bodyEl.appendChild(el)
+try{el.scrollIntoView({block:"nearest"})}catch(e){}
+if(document.activeElement===okBtn||!box.contains(document.activeElement))cancelBtn.focus()
+const t0=Date.now()
+const timer=setInterval(()=>{
+const sec=Math.round((Date.now()-t0)/1000)
+el.querySelector(".conn-wiz-elapsed").textContent=sec+" s"
+if(sec===20)el.querySelector(".conn-wiz-running-text").textContent=text+". Still working; Cancel stops waiting."
+},1000)
+tok.finish=()=>{clearInterval(timer);el.remove();if(running===tok)running=null}
+return tok
+}
+const job=(kind,text)=>{const tok=busy(text);return connJobRun(bridgeCall,kind,tool,{token:tok}).finally(()=>tok.finish())}
+const wait=(p,text)=>{const tok=busy(text);return Promise.race([Promise.resolve(p),tok.promise.then(()=>{throw CONN_CANCELLED})]).finally(()=>tok.finish())}
+const status=()=>job("status","Checking "+label+": version, sign-in and connection").then((st)=>{connState.overview.tools[tool]=st;return st})
+const head=(v)=>`<div class="conn-wiz-title">Step ${v.index+1} of ${CONN_STEPS.length}: ${connEsc(v.step.title)}</div>`
+const waitAnswer=()=>new Promise((resolve)=>{answer=(a)=>{answer=null;okBtn.disabled=true;resolve(a)}})
 // Builds the step's text (loading what it needs first), then waits for Approve / Cancel.
 const ask=(v)=>{
 markSteps(v.index,v.status)
 okBtn.disabled=true
 okBtn.textContent=v.done?"Continue":"Approve"
-bodyEl.innerHTML=`<div class="conn-wiz-title">Step ${v.index+1} of ${CONN_STEPS.length}: ${connEsc(v.step.title)}</div><div class="set-status">Checking...</div>`
-return connStepView(tool,v,w).then((html)=>{
-bodyEl.innerHTML=`<div class="conn-wiz-title">Step ${v.index+1} of ${CONN_STEPS.length}: ${connEsc(v.step.title)}</div>${v.note?`<div class="set-status error">${connEsc(v.note)}</div>`:""}${html.body}`
+if(v.statusFailed){
+bodyEl.innerHTML=`${head(v)}<div class="set-status error">Could not check ${connEsc(label)}: ${connEsc(v.note)}</div><p class="set-info">Approve checks again. Cancel closes the assistant.</p>`
+okBtn.textContent="Check again";okBtn.disabled=false;okBtn.focus()
+return waitAnswer()
+}
+bodyEl.innerHTML=head(v)
+return wait(connStepView(tool,v,w),"Preparing this step").then((html)=>{
+bodyEl.innerHTML=`${head(v)}${v.info?`<div class="set-status conn-wiz-ok">${connEsc(v.info)}</div>`:""}${v.note?`<div class="set-status error">${connEsc(v.note)}</div>`:""}${html.body}`
 bodyEl.querySelectorAll(".conn-copy").forEach((b)=>b.addEventListener("click",()=>connCopy(b.dataset.copy)))
 bodyEl.querySelectorAll(".conn-link").forEach((b)=>b.addEventListener("click",()=>bridgeCall("notes.open_url",[b.dataset.url]).catch(()=>{})))
 bodyEl.querySelectorAll('input[name="connWizMethod"]').forEach((r)=>r.addEventListener("change",()=>{w.method=r.value;w.plan=null}))
 okBtn.textContent=html.ok||(v.done?"Continue":"Approve")
 okBtn.disabled=!!html.blocked
 ;(okBtn.disabled?cancelBtn:okBtn).focus()
-return new Promise((resolve)=>{answer=(a)=>{answer=null;okBtn.disabled=true;resolve(a)}})
+return waitAnswer()
 }).catch((err)=>{
-bodyEl.innerHTML=`<div class="conn-wiz-title">${connEsc(v.step.title)}</div><div class="set-status error">${connEsc(connErr(err))}</div>`
+if(connIsCancel(err))return "cancel"
+bodyEl.innerHTML=`${head(v)}<div class="set-status error">${connEsc(connErr(err))}</div><p class="set-info">Cancel closes the assistant; open it again to retry.</p>`
 okBtn.disabled=true;cancelBtn.focus()
-return new Promise((resolve)=>{answer=(a)=>{answer=null;resolve(a)}})
+return waitAnswer()
 })
 }
-const working=(text)=>{bodyEl.insertAdjacentHTML("beforeend",`<div class="set-status">${connEsc(text)}</div>`)}
 const act={
 prereq:()=>{if(!w.method)return {retry:true,message:"Pick an install method that is ready to use."}},
 install:()=>{
-working("Opening the terminal...")
 const p=w.plan
 w.plan=null  // single use
+if(!p)return {retry:true,message:"The install command expired. Approve again to run it."}
 const shell=connLoyaShell()
 const run=shell&&p.use_shell===shell?bridgeCall("extAgents.connection_install_command",[tool,p.method,shell,p.token]).then((line)=>termOpenForRun().then(()=>termNewTab(shell,{name:label+" install",startup:line})).then(()=>"the LOYA NG terminal"))
 :bridgeCall("extAgents.connection_install_os",[tool,p.method,p.token]).then((r)=>r.terminal)
-return run.then((where)=>{w.installedVia=where})
+return wait(run,"Opening the terminal").then((where)=>{w.installedVia=where;return {info:"The installer is running in "+where+"."}})
 },
-verify:()=>bridgeCall("extAgents.connection_detect",[tool]).then((d)=>d.installed?null:{retry:true,message:"Not found yet. Wait for the installer to finish in "+(w.installedVia||"the terminal")+", then press Check again."}),
-signin:()=>connOpenSignIn(tool).then((where)=>{w.signinVia=where}),
-connect:()=>{working("Connecting...");return bridgeCall("extAgents.connection_connect",[tool]).then(()=>null)},
-test:()=>{working("Testing...");return bridgeCall("extAgents.connection_test",[tool]).then((r)=>{w.testResult=r;return r})}
+verify:()=>job("detect","Looking for "+label+" in PATH and the install folders").then((d)=>d.installed?{info:"Found "+label+" at "+d.path+"."}:{retry:true,message:"Not found yet. Wait for the installer to finish in "+(w.installedVia||"the terminal")+", then press Check again."}),
+signin:()=>wait(connOpenSignIn(tool),"Opening "+label+"'s own sign-in").then((where)=>{w.signinVia=where;return {info:"Opened "+where+" with "+label+"'s sign-in. Finish it there; you can connect now and sign in later."}}),
+connect:()=>job("connect","Connecting: starting LOYA NG's MCP server, registering it in "+label+" and installing the LOYA skills").then((r)=>({info:(r&&r.message)||label+" is connected."})),
+test:()=>job("test","Testing: the registration in "+label+", LOYA NG's MCP server and a tool list through the bridge").then((r)=>{w.testResult=r;return r})
 }
 const finish=(res)=>{
 const tail=()=>connMountSettings(connState.root)
-if(res.cancelled){connState.reached[tool]=res.index;close();return tail().then(()=>connStatus(tool,"Setup stopped at step "+(res.index+1)+" ("+CONN_STEPS[res.index].title+"). Nothing else was run. Open the assistant again ("+(connState.overview.tools[tool].installed?"Set up":"Install for me")+") to continue from there.",false))}
+if(res.cancelled){
+connState.reached[tool]=res.index;close()
+const where="step "+(res.index+1)+" ("+CONN_STEPS[res.index].title+")"
+const reopen=" Open the assistant again ("+(connState.overview.tools[tool].installed?"Set up":"Install for me")+") to continue from there."
+const msg=res.running?"Cancelled during "+where+": LOYA NG stopped waiting and stopped the CLI. Nothing else was run."+reopen:"Setup stopped at "+where+". Nothing else was run."+reopen
+return tail().then(()=>connStatus(tool,msg,false),()=>connStatus(tool,msg,false))
+}
 delete connState.reached[tool]
 if(!res.done){close();return tail()}
 const r=res.result||{}
@@ -317,7 +412,11 @@ cancelBtn.classList.add("hidden")
 okBtn.textContent="Done";okBtn.disabled=false;okBtn.focus()
 return new Promise((resolve)=>{answer=()=>{answer=null;resolve()}}).then(()=>{close();return tail()})
 }
-return status().then((st)=>connRunWizard({start:connResumeStart(st,connState.reached[tool]),status,ask,act})).then(finish).catch((err)=>{close();connStatus(tool,connErr(err),true)})
+const first=()=>status().catch((e)=>{if(connIsCancel(e))throw e;return st0})
+return first().then((st)=>connRunWizard({start:connResumeStart(st,connState.reached[tool]),status,ask,act})).then(finish).catch((err)=>{
+if(connIsCancel(err))return finish({cancelled:true,running:true,index:connResumeStart(st0,connState.reached[tool])})
+close();connStatus(tool,connErr(err),true)
+})
 }
 // What each step shows. Returns {body, ok?:primary label, blocked?:true when Approve cannot be pressed}.
 function connStepView(tool,v,w){

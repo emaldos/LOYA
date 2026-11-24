@@ -3,7 +3,8 @@
 No real CLI is run and no real config is touched: HOME, CLAUDE_CONFIG_DIR and CODEX_HOME point into a temp folder and
 `claude` / `codex` are fake scripts on PATH that log their argv and answer like the real commands. The MCP traffic is real:
 the stdio bridge is run as a child process against the in-app HTTP server on a free port."""
-import json,os,socket,stat,subprocess,sys,tempfile,textwrap,unittest
+import json,os,signal,socket,stat,subprocess,sys,tempfile,textwrap,time,unittest
+from unittest import mock
 from _isolate import IsolatedData
 from Cores import common_db
 from Cores.Services import ai_service as ai
@@ -12,10 +13,18 @@ from Cores.Services import security_service as security
 from Cores.Services import ext_agents_service as ext
 from Cores.Services import ext_connections_service as conn
 FAKE=r'''
-import json,os,sys
+import json,os,sys,time
 name=sys.argv[1];args=sys.argv[2:]
 home=os.environ["HOME"]
 with open(os.path.join(home,"cli_calls.log"),"a") as f:f.write(json.dumps([name]+args)+"\n")
+hang_p=os.path.join(home,name+"_hang.json")  # test hook: hang on these leading args, pid in <name>_hang.pid
+if os.path.exists(hang_p):
+    h=json.load(open(hang_p))
+    if args[:len(h["args"])]==h["args"]:
+        pid_p=os.path.join(home,name+"_hang.pid")
+        with open(pid_p+".tmp","w") as f:f.write(str(os.getpid()))
+        os.replace(pid_p+".tmp",pid_p)
+        time.sleep(h.get("secs",30))
 state_p=os.path.join(home,name+"_state.json")
 state=json.load(open(state_p)) if os.path.exists(state_p) else {}
 def save():json.dump(state,open(state_p,"w"))
@@ -82,6 +91,29 @@ class Env:
     def set_state(self,name,**kw):
         d=self.state(name);d.update(kw)
         json.dump(d,open(os.path.join(self.home,name+"_state.json"),"w"))
+    def hang(self,name,args,secs=30):
+        """The fake `name` sleeps `secs` when called with these leading args (and writes its pid first)."""
+        json.dump({"args":args,"secs":secs},open(os.path.join(self.home,name+"_hang.json"),"w"))
+        return os.path.join(self.home,name+"_hang.pid")
+def wait_for(cond,timeout):
+    end=time.monotonic()+timeout
+    while time.monotonic()<end:
+        if cond():return True
+        time.sleep(0.05)
+    return bool(cond())
+def pid_gone(pid):
+    """True when the process no longer exists (a zombie waiting for its parent counts as gone)."""
+    if os.path.isdir("/proc"):
+        try:
+            with open(f"/proc/{pid}/stat") as f:return f.read().rsplit(")",1)[1].split()[0] in ("Z","X")
+        except (FileNotFoundError,ProcessLookupError):return True
+    try:os.kill(pid,0)
+    except ProcessLookupError:return True
+    except PermissionError:return False
+    return False
+def read_pid(path,timeout=10):
+    if not wait_for(lambda:os.path.exists(path) and open(path).read().strip(),timeout):raise AssertionError("no pid file "+path)
+    return int(open(path).read().strip())
 @unittest.skipIf(os.name=="nt","fake CLIs are POSIX shell scripts")
 class ConnectionsTest(unittest.TestCase):
     @classmethod
@@ -272,6 +304,154 @@ class ConnectionsTest(unittest.TestCase):
         self.assertFalse(conn.autostart())
         conn.connect("codex_cli")
         self.assertTrue(conn.autostart())
+    # ---- a CLI that hangs, or leaves a helper running, never holds a call (the setup dialog hung on this)
+    def script(self,name,body):
+        p=os.path.join(self.env.bin,name)
+        with open(p,"w") as f:f.write("#!/bin/sh\n"+body+"\n")
+        os.chmod(p,0o755)
+        return p
+    def kill_later(self,pid):
+        def k():
+            try:os.kill(pid,signal.SIGKILL)
+            except OSError:pass
+        self.addCleanup(k)
+    def test_run_returns_when_cli_leaves_a_helper_holding_stdout(self):
+        pidf=os.path.join(self.env.tmp,"helper.pid")
+        p=self.script("leaves_helper",f"sleep 60 &\necho $! > '{pidf}.tmp'; mv '{pidf}.tmp' '{pidf}'\necho hello\necho oops >&2\nexit 0")
+        t=time.monotonic()
+        rc,out,err=conn._run([p],timeout=5)
+        took=time.monotonic()-t
+        self.kill_later(read_pid(pidf))
+        self.assertLess(took,2.5)
+        self.assertEqual((0,"hello\n","oops\n"),(rc,out,err))
+    def test_run_timeout_kills_the_whole_process_group(self):
+        pidf=os.path.join(self.env.tmp,"child.pid")
+        p=self.script("hangs",f"echo started\nsleep 60 &\necho $! > '{pidf}.tmp'; mv '{pidf}.tmp' '{pidf}'\nwait")
+        t=time.monotonic()
+        rc,out,err=conn._run([p],timeout=1)
+        took=time.monotonic()-t
+        child=read_pid(pidf,1);self.kill_later(child)
+        self.assertLess(took,3)
+        self.assertEqual(124,rc);self.assertTrue(err.endswith("timed out"),err);self.assertEqual("started\n",out)
+        self.assertTrue(wait_for(lambda:pid_gone(child),2),"the CLI's child survived the timeout")
+    def test_run_gives_the_cli_no_stdin(self):
+        p=self.script("reads_stdin",'read line\necho "got:[$line]"')
+        t=time.monotonic()
+        rc,out,_err=conn._run([p],timeout=10)
+        self.assertLess(time.monotonic()-t,2)
+        self.assertNotEqual(124,rc);self.assertIn("got:[]",out)
+    def test_run_missing_program(self):
+        rc,_o,err=conn._run([os.path.join(self.env.bin,"nope")],timeout=5)
+        self.assertEqual(127,rc);self.assertTrue(err)
+    # ---- background jobs
+    def poll_until_done(self,jid,timeout=30):
+        r={}
+        def done():
+            r.update(conn.job_poll(jid));return r["done"]
+        self.assertTrue(wait_for(done,timeout),r)
+        return r
+    def test_job_returns_at_once_and_cancel_stops_the_cli(self):
+        pidf=self.env.hang("claude",["--version"],30)
+        t=time.monotonic()
+        jid=conn.job_start("status","claude_code")["job"]
+        self.assertLess(time.monotonic()-t,0.5)
+        pid=read_pid(pidf);self.kill_later(pid)
+        r=conn.job_poll(jid)
+        self.assertFalse(r["done"]);self.assertIn("elapsed",r)
+        self.assertEqual({"cancelled":True},conn.job_cancel(jid))
+        r=self.poll_until_done(jid,2)
+        self.assertTrue(r.get("cancelled"),r)
+        self.assertTrue(wait_for(lambda:conn._jobs[jid].done,2),"the job thread did not stop")
+        self.assertTrue(wait_for(lambda:pid_gone(pid),2),"the hung CLI is still running")
+        self.assertTrue(conn.job_poll(jid)["cancelled"])
+    def test_job_result_and_error(self):
+        r=self.poll_until_done(conn.job_start("status","codex_cli")["job"])
+        self.assertTrue(r["ok"],r);self.assertEqual("codex-cli 0.120.0",r["result"]["version"])
+        r=self.poll_until_done(conn.job_start("overview")["job"])
+        self.assertTrue(r["ok"],r);self.assertEqual(set(conn.TOOLS),set(r["result"]["tools"]))
+        os.environ["PATH"]="/nonexistent"
+        r=self.poll_until_done(conn.job_start("connect","codex_cli")["job"])
+        self.assertFalse(r["ok"]);self.assertIn("not found",r["error"])
+    def test_cancel_after_done_changes_nothing(self):
+        jid=conn.job_start("preview","claude_code")["job"]
+        r=self.poll_until_done(jid)
+        self.assertTrue(r["ok"],r)
+        self.assertEqual({"cancelled":False,"done":True},conn.job_cancel(jid))
+        self.assertTrue(conn.job_poll(jid)["ok"])
+    def test_connect_job_completes(self):
+        r=self.poll_until_done(conn.job_start("connect","claude_code")["job"])
+        self.assertTrue(r["ok"],r);self.assertTrue(r["result"]["connected"])
+        self.assertIsNotNone(conn._read_conn("claude_code"))
+        r=self.poll_until_done(conn.job_start("disconnect","claude_code")["job"])
+        self.assertTrue(r["ok"],r);self.assertFalse(r["result"]["connected"])
+    def test_cancelled_connect_leaves_no_connection(self):
+        pidf=self.env.hang("claude",["mcp","add"],30)
+        jid=conn.job_start("connect","claude_code")["job"]
+        pid=read_pid(pidf);self.kill_later(pid)
+        self.assertIsNotNone(conn._read_conn("claude_code"))  # written before the CLI registers it
+        conn.job_cancel(jid)
+        self.assertTrue(self.poll_until_done(jid,2).get("cancelled"))
+        self.assertTrue(wait_for(lambda:conn._jobs[jid].done,2))
+        self.assertIsNone(conn._read_conn("claude_code"))
+        self.assertTrue(wait_for(lambda:pid_gone(pid),2))
+    def test_cancelled_reconnect_restores_the_previous_connection(self):
+        conn.connect("claude_code");before=conn._read_conn("claude_code")
+        pidf=self.env.hang("claude",["mcp","add"],30)
+        jid=conn.job_start("connect","claude_code")["job"]
+        self.kill_later(read_pid(pidf))
+        conn.job_cancel(jid)
+        self.assertTrue(wait_for(lambda:conn._jobs[jid].done,2))
+        self.assertEqual(before["token"],conn._read_conn("claude_code")["token"])
+    def test_status_right_after_a_cancelled_connect_sees_the_restored_state(self):
+        # The UI refreshes the card as soon as Cancel is pressed: that status must not read the half-done connection file.
+        pidf=self.env.hang("claude",["mcp","add"],30)
+        jid=conn.job_start("connect","claude_code")["job"]
+        self.kill_later(read_pid(pidf))
+        conn.job_cancel(jid)
+        sid=conn.job_start("status","claude_code")["job"]
+        r=self.poll_until_done(sid,10)
+        self.assertTrue(r["ok"],r)
+        self.assertFalse(r["result"]["connected"])
+    def test_unknown_job_and_kind_are_refused(self):
+        for bad in ("nope",None,""):
+            with self.assertRaises(conn.ConnectionError_):conn.job_poll(bad)
+            with self.assertRaises(conn.ConnectionError_):conn.job_cancel(bad)
+        with self.assertRaises(conn.ConnectionError_):conn.job_start("rm -rf","claude_code")
+        with self.assertRaises(conn.ConnectionError_):conn.job_start("status","bogus")
+@unittest.skipIf(os.name=="nt","SO_REUSEADDR rules differ on Windows")
+class ServerPortTest(unittest.TestCase):
+    """A busy port never ends the app: an explicit port is refused, an automatic one moves on to a free port."""
+    @classmethod
+    def setUpClass(cls):
+        cls.iso=IsolatedData();cls.iso.start()
+    @classmethod
+    def tearDownClass(cls):
+        mcp.stop_server()
+        cls.iso.stop()
+    def setUp(self):
+        mcp.stop_server()
+        self.busy=socket.socket();self.busy.bind(("127.0.0.1",0));self.busy.listen(1)
+        self.port=self.busy.getsockname()[1]
+    def tearDown(self):
+        mcp.stop_server()
+        self.busy.close()
+    def test_explicit_busy_port_raises_runtime_error(self):
+        with self.assertRaises(RuntimeError) as cx:mcp.start_server(self.port,register_provider=False)
+        self.assertIn(str(self.port),str(cx.exception))
+        self.assertFalse(mcp.is_running())
+    def test_automatic_port_skips_a_busy_default(self):
+        with mock.patch.object(mcp,"DEFAULT_PORT",self.port):
+            st=mcp.start_server(None,register_provider=False)
+        self.assertTrue(st["running"]);self.assertNotEqual(self.port,st["port"])
+        self.assertTrue(mcp.status()["running"])
+        self.assertEqual(st["port"],mcp.start_server(None,register_provider=False)["port"])  # already running: same server
+    def test_uvicorn_bind_failure_does_not_end_the_process(self):
+        with mock.patch.object(mcp,"_port_free",lambda p:True):
+            try:
+                with self.assertRaises(RuntimeError):mcp.start_server(self.port,register_provider=False)
+            except SystemExit:self.fail("SystemExit escaped start_server")
+        self.assertFalse(mcp.is_running())
+        self.assertTrue(mcp.start_server(None,register_provider=False)["running"])  # a later start still works
 TOOL_SH="#!/bin/sh\necho \"$(basename $0) $*\" >> '{log}'\n{body}\n"
 @unittest.skipIf(os.name=="nt","fake tools are POSIX shell scripts")
 class InstallTest(unittest.TestCase):

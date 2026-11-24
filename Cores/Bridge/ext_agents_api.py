@@ -101,3 +101,10 @@ class ExternalAgentsAPI:
         return _conn.install_os_terminal(tool,method_id,token)
     def connection_connect_preview(self,tool):
         return _conn.connect_preview(tool)
+    # Background steps: start returns at once; the UI polls and can cancel (a slow or hung CLI never holds a bridge call).
+    def connection_job_start(self,kind,tool=None):
+        return _conn.job_start(kind,tool)
+    def connection_job_poll(self,job_id):
+        return _conn.job_poll(job_id)
+    def connection_job_cancel(self,job_id):
+        return _conn.job_cancel(job_id)

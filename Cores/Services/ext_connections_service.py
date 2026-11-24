@@ -23,7 +23,7 @@ CLI commands used (from the vendors' CLI references, read 2026-11-24; the CLIs w
   codex mcp add <name> -- <cmd> [args] | codex mcp remove <name> | codex mcp get <name> --json
 Older CLIs without one of these answer with an error; that is reported as "unknown", never guessed.
 """
-import os,sys,re,json,glob,shlex,shutil,secrets,hmac,hashlib,threading,subprocess
+import os,sys,re,json,glob,shlex,shutil,secrets,hmac,hashlib,signal,tempfile,threading,time,subprocess,uuid
 from datetime import datetime,timezone
 TOOLS=("claude_code","codex_cli")
 SERVER_NAME="loya-note"
@@ -147,14 +147,58 @@ def _cli_env():
     for k in list(env):
         if k.startswith("LOYA_"):env.pop(k,None)
     return env
-def _run(argv,timeout=CLI_TIMEOUT):
-    try:
-        r=subprocess.run(argv,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=timeout,env=_cli_env(),stdin=subprocess.DEVNULL,**_flags())
-        return r.returncode,r.stdout or "",r.stderr or ""
-    except subprocess.TimeoutExpired:
-        return 124,"","timed out"
-    except OSError as e:
-        return 127,"",str(e)
+class Cancelled(Exception):
+    """The operator pressed Cancel while this step was running."""
+_job_local=threading.local()
+def _current_job():return getattr(_job_local,"job",None)
+def _popen_kw():
+    """The CLI runs in its own process group / session, so a timeout or Cancel can stop it together with anything it
+    started, and nothing it does to its own group can reach LOYA NG."""
+    if _IS_WINDOWS:return {"creationflags":0x08000000|0x00000200}  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    return {"start_new_session":True}
+def _kill_tree(proc):
+    if _IS_WINDOWS:
+        try:subprocess.run(["taskkill","/T","/F","/PID",str(proc.pid)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10,creationflags=0x08000000)
+        except Exception:pass
+    else:
+        try:os.killpg(proc.pid,signal.SIGKILL)
+        except Exception:pass
+    try:proc.kill()
+    except Exception:pass
+    try:proc.wait(timeout=5)
+    except Exception:pass
+def _decode(b):return (b or b"").decode("utf-8","replace").replace("\r\n","\n")
+def _run(argv,timeout=CLI_TIMEOUT,env=None):
+    """(rc, stdout, stderr). Never waits longer than `timeout` (rc 124) and never blocks on stdin (DEVNULL): the output goes
+    to temp files, not pipes, so a helper the CLI leaves running cannot keep this call waiting for the pipe to close.
+    In a connection job, Cancel stops the CLI at once (raises Cancelled)."""
+    job=_current_job()
+    if job is not None and job.cancelled:raise Cancelled()
+    with tempfile.TemporaryFile() as out,tempfile.TemporaryFile() as err:
+        try:
+            proc=subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=out,stderr=err,env=_cli_env() if env is None else env,**_popen_kw())
+        except OSError as e:
+            return 127,"",str(e)
+        if job is not None:job.procs.add(proc)
+        deadline=time.monotonic()+max(0.1,float(timeout))
+        rc=None
+        try:
+            while rc is None:
+                try:rc=proc.wait(timeout=0.1)
+                except subprocess.TimeoutExpired:pass
+                if rc is not None:break
+                if job is not None and job.cancelled:
+                    _kill_tree(proc)
+                    raise Cancelled()
+                if time.monotonic()>=deadline:
+                    _kill_tree(proc)
+                    rc=124
+        finally:
+            if job is not None:job.procs.discard(proc)
+        out.seek(0);err.seek(0)
+        o,e=_decode(out.read()),_decode(err.read())
+    if rc==124:return 124,o,(e+"\n" if e else "")+"timed out"
+    return rc,o,e
 def _clean(text,limit=200):
     t=" ".join(str(text or "").split())
     try:t=_ext().redact_text(t)
@@ -265,7 +309,11 @@ def autostart():
     """At app start: a connected CLI needs the server, so start it in the background (it refuses every call while locked)."""
     if not any(_read_conn(t) for t in TOOLS):return False
     def run():
-        try:ensure_server()
+        try:
+            ensure_server()
+            for t in TOOLS:  # the server may be on another port than last time (8765 busy): point the bridges at it
+                c=_read_conn(t)
+                if c:_sync_port(t,c)
         except Exception as e:_audit("ext_connection",f"MCP server autostart failed: {e}",False)
     threading.Thread(target=run,name="loya-cli-mcp-autostart",daemon=True).start()
     return True
@@ -302,11 +350,24 @@ def connect(tool):
     cli,_how=find_cli(tool)
     if not cli:raise ConnectionError_(f"{label} was not found. Install it first, then try again.")
     bridge_python()
-    port=ensure_server()
+    try:port=ensure_server()
+    except Exception as e:
+        _audit("ext_connection",f"{label}: LOYA NG's MCP server did not start: {e}",False)
+        raise ConnectionError_(f"LOYA NG's MCP server did not start, so {label} was not connected: {e}")
+    job=_current_job()
+    if job is not None and job.cancelled:raise Cancelled()
     prev=_read_conn(tool)
     _write_conn(tool,{"tool":tool,"token":secrets.token_urlsafe(32),"port":port,"connected_at":_now_iso(),"cli_path":cli,"skills":(prev or {}).get("skills",[])})
-    _run(remove_argv(tool,cli))  # an older registration (e.g. another LOYA folder) is replaced
-    rc,out,err=_run(add_argv(tool,cli))
+    try:
+        _run(remove_argv(tool,cli))  # an older registration (e.g. another LOYA folder) is replaced
+        rc,out,err=_run(add_argv(tool,cli))
+    except Cancelled:
+        # Stopped half way: put the connection file back the way it was (the CLI may or may not have the new entry;
+        # its bridge then reads the old token, or none, so nothing new is reachable).
+        if prev:_write_conn(tool,prev)
+        else:_delete_conn(tool)
+        _audit("ext_connection",f"{label}: Connect cancelled by the operator",False)
+        raise
     if rc!=0:
         if prev:_write_conn(tool,prev)
         else:_delete_conn(tool)
@@ -359,11 +420,9 @@ def test_connection(tool):
     steps.append({"name":"LOYA NG MCP server","ok":running,"detail":"running" if running else "not running"})
     if conn and running:
         _sync_port(tool,conn)
-        try:
-            r=subprocess.run(bridge_argv(tool)+["--selftest"],capture_output=True,text=True,timeout=60,stdin=subprocess.DEVNULL,**_flags())
-            res=json.loads((r.stdout or "{}").strip().splitlines()[-1])
-        except Exception as e:
-            res={"ok":False,"error":f"{type(e).__name__}: {e}"}
+        rc,sout,serr=_run(bridge_argv(tool)+["--selftest"],timeout=60)
+        try:res=json.loads((sout or "{}").strip().splitlines()[-1])
+        except Exception:res={"ok":False,"error":"timed out" if rc==124 else (_clean(serr,200) or f"exit code {rc}")}
         steps.append({"name":"Bridge to LOYA NG","ok":bool(res.get("ok")),"detail":f"{res.get('tools')} tools offered" if res.get("ok") else _clean(res.get("error"),200)})
     ok=all(s["ok"] for s in steps)
     _audit("ext_connection",f"{label} connection test: "+("passed" if ok else "failed - "+"; ".join(s["name"] for s in steps if not s["ok"])),ok)
@@ -585,3 +644,66 @@ def connect_preview(tool):
     shown=[TOOL_INFO[tool]["exe"]]+argv[1:]
     text=subprocess.list2cmdline(shown) if _IS_WINDOWS else " ".join(shlex.quote(x) for x in shown)
     return {"command":text,"skills_dir":skills_dir(tool),"skills":[s["name"] for s in _ext().bundled_skill_sources()],"server_name":SERVER_NAME}
+# ---------------------------------------------------------------- background jobs (the UI never waits on a CLI in a bridge call)
+# Every step of the Connections card and the setup assistant that runs the CLI or starts the MCP server is a job: the
+# bridge call that starts it returns at once, the UI polls it (short calls) and shows it running, and Cancel stops it.
+JOB_KINDS={"overview":None,"status":status,"detect":detect,"connect":connect,"disconnect":disconnect,"test":test_connection,"preview":connect_preview}
+JOB_KEEP=600
+_jobs={}
+_jobs_lock=threading.Lock()
+class _Job:
+    def __init__(self,kind,tool):
+        self.id=uuid.uuid4().hex[:16];self.kind=kind;self.tool=tool;self.started=time.monotonic();self.ended=None
+        self.done=False;self.cancelled=False;self.result=None;self.error="";self.procs=set()
+_WRITES=("connect","disconnect")
+def _job_body(job,before=()):
+    for b in before:
+        deadline=time.monotonic()+10
+        while not b.done and time.monotonic()<deadline:time.sleep(0.05)
+    _job_local.job=job
+    try:
+        out=overview() if job.kind=="overview" else JOB_KINDS[job.kind](job.tool)
+        if not job.cancelled:job.result=out
+    except Cancelled:
+        job.cancelled=True
+    except ConnectionError_ as e:
+        job.error=str(e)
+    except Exception as e:
+        job.error=f"{type(e).__name__}: {e}"
+        _audit("ext_connection",f"{job.kind} failed: {job.error}",False)
+    finally:
+        _job_local.job=None
+        job.ended=time.monotonic();job.done=True
+def job_start(kind,tool=None):
+    """Start a connection step in the background. Returns {"job": id} at once."""
+    kind=str(kind or "")
+    if kind not in JOB_KINDS:raise ConnectionError_(f"Unknown step: {kind}")
+    tool=None if kind=="overview" else _tool(tool)
+    job=_Job(kind,tool)
+    now=time.monotonic()
+    with _jobs_lock:
+        for k in [k for k,j in _jobs.items() if j.done and now-(j.ended or now)>JOB_KEEP]:_jobs.pop(k,None)
+        # A step started right after a cancelled Connect / Disconnect waits until that one has put the connection file back,
+        # so it never reads (or overwrites) a half-done state. Two writes on one tool never overlap.
+        before=[j for j in _jobs.values() if j.kind in _WRITES and not j.done and (tool is None or j.tool==tool) and (j.cancelled or kind in _WRITES)]
+        _jobs[job.id]=job
+    threading.Thread(target=_job_body,args=(job,before),name=f"loya-conn-{kind}",daemon=True).start()
+    return {"job":job.id}
+def _get_job(job_id):
+    with _jobs_lock:j=_jobs.get(str(job_id or ""))
+    if j is None:raise ConnectionError_("That step is no longer running. Open the assistant again.")
+    return j
+def job_poll(job_id):
+    """{"done": False, "elapsed"} while it runs; then {"done": True} with "result", "error" or "cancelled"."""
+    j=_get_job(job_id)
+    el=round((j.ended or time.monotonic())-j.started,1)
+    if j.cancelled:return {"done":True,"cancelled":True,"elapsed":el}
+    if not j.done:return {"done":False,"elapsed":el}
+    if j.error:return {"done":True,"ok":False,"error":j.error,"elapsed":el}
+    return {"done":True,"ok":True,"result":j.result,"elapsed":el}
+def job_cancel(job_id):
+    """Stop waiting for a step: its CLI (and anything that CLI started) is stopped at once."""
+    j=_get_job(job_id)
+    if j.done and not j.cancelled:return {"cancelled":False,"done":True}
+    j.cancelled=True  # the job's _run() sees this within 0.1 s and stops its CLI; this call itself never waits
+    return {"cancelled":True}
