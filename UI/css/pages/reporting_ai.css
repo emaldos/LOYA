@@ -1,0 +1,27 @@
+/* Reporting: the AI consent / progress dialog (UI/js/pages/reporting_ai.js). Uses the --rpt-* tokens of reporting_findings.css. */
+.rpt-modal.rai-modal{width:min(560px,94vw)}
+/* Opened from the evidence manager (a body-level overlay at z-index 150): the dialog's layer is moved to <body> and raised above it. */
+.rai-top,[data-theme="light"] .rai-top{position:fixed;inset:0;z-index:170}
+.rai-box{display:flex;flex-direction:column;gap:10px;font-size:12px;color:var(--text);line-height:1.5}
+.rai-dest{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--glass-border);background:var(--rpt-field-bg)}
+.rai-dest-remote{border-color:color-mix(in srgb,var(--rpt-sev-medium) 60%,transparent)}
+.rai-dest-row{display:flex;gap:10px;align-items:baseline}
+.rai-dest-label{flex:0 0 84px;font-size:11px;font-weight:600;color:var(--text-dim)}
+.rai-dest-value{flex:1;min-width:0;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.rai-mono{font-family:var(--font-mono);font-size:11.5px}
+.rai-warn{padding:8px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--rpt-sev-medium) 60%,transparent);background:color-mix(in srgb,var(--rpt-sev-medium) 12%,transparent);font-weight:600}
+.rai-head{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px}
+.rai-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.rai-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:var(--text-dim)}
+.rai-details{display:flex;flex-direction:column;gap:6px}
+.rai-details.hidden{display:none}
+.rai-details-label{font-size:11px;font-weight:600;color:var(--text-dim)}
+.rai-pre{margin:0;padding:10px 12px;max-height:200px;overflow:auto;border-radius:8px;border:1px solid var(--glass-border);background:var(--rpt-code-bg);font-family:var(--font-mono);font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.rai-foot{font-size:11px;color:var(--text-dim)}
+.rai-progress{align-items:center;text-align:center;padding:22px 0 14px}
+.rai-spinner{width:26px;height:26px;border-radius:50%;border:3px solid var(--glass-border);border-top-color:var(--accent-a);animation:raiSpin 0.9s linear infinite}
+.rai-progress-text{font-weight:600}
+.rai-progress-time{font-size:11px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+.rai-error{padding:10px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--danger) 55%,transparent);background:color-mix(in srgb,var(--danger) 10%,transparent);overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+@keyframes raiSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.rai-spinner{animation-duration:2.4s}}

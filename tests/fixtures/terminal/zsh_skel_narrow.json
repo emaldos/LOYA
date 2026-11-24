@@ -1,0 +1,754 @@
+{
+"shell": "zsh",
+"cols": 40,
+"rc": "/etc/skel/.zshrc",
+"events": [
+{
+"out": "                                        \r\r\u001b]0;user@kali: ~\u0007"
+},
+{
+"out": "\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[32m\u250c\u2500\u2500(\u001b[1m\u001b[32m\u001b[34muser\u327fkali\u001b[0m\u001b[34m\u001b[32m)-[\u001b[1m\u001b[32m\u001b[39m~\u001b[0m\u001b[32m]\r\n\u2514\u2500\u001b[1m\u001b[32m\u001b[34m$\u001b[0m\u001b[34m\u001b[39m \u001b[K\u001b[?1h\u001b=\u001b[?2004h"
+},
+{
+"submit": "echo hello world from a narrow pane",
+"jobId": "jnar01",
+"sent": "echo hello world from a narrow pane ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jnar01' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "e"
+},
+{
+"out": "\bec"
+},
+{
+"out": "h"
+},
+{
+"out": "o"
+},
+{
+"out": " "
+},
+{
+"out": "h"
+},
+{
+"out": "e"
+},
+{
+"out": "l"
+},
+{
+"out": "l"
+},
+{
+"out": "o"
+},
+{
+"out": " "
+},
+{
+"out": "w"
+},
+{
+"out": "o"
+},
+{
+"out": "r"
+},
+{
+"out": "l"
+},
+{
+"out": "d"
+},
+{
+"out": " "
+},
+{
+"out": "f"
+},
+{
+"out": "r"
+},
+{
+"out": "o"
+},
+{
+"out": "m"
+},
+{
+"out": " "
+},
+{
+"out": "a"
+},
+{
+"out": " "
+},
+{
+"out": "n"
+},
+{
+"out": "a"
+},
+{
+"out": "r"
+},
+{
+"out": "r"
+},
+{
+"out": "o"
+},
+{
+"out": "w"
+},
+{
+"out": " "
+},
+{
+"out": "p"
+},
+{
+"out": "a"
+},
+{
+"out": "n"
+},
+{
+"out": "e"
+},
+{
+"out": "  \r\u001b[K"
+},
+{
+"out": "\u001b[K"
+},
+{
+"out": ";"
+},
+{
+"out": "\r;p"
+},
+{
+"out": "r"
+},
+{
+"out": "i"
+},
+{
+"out": "n"
+},
+{
+"out": "t"
+},
+{
+"out": "f"
+},
+{
+"out": " "
+},
+{
+"out": "'"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "L"
+},
+{
+"out": "O"
+},
+{
+"out": "Y"
+},
+{
+"out": "A"
+},
+{
+"out": "_"
+},
+{
+"out": "J"
+},
+{
+"out": "O"
+},
+{
+"out": "B"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "E"
+},
+{
+"out": "N"
+},
+{
+"out": "D"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "\\"
+},
+{
+"out": "n"
+},
+{
+"out": "'"
+},
+{
+"out": "  \r\u001b[K"
+},
+{
+"out": "\u001b[K"
+},
+{
+"out": "'"
+},
+{
+"out": "\r'j"
+},
+{
+"out": "n"
+},
+{
+"out": "a"
+},
+{
+"out": "r"
+},
+{
+"out": "0"
+},
+{
+"out": "1"
+},
+{
+"out": "'"
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "?"
+},
+{
+"out": "\""
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "P"
+},
+{
+"out": "W"
+},
+{
+"out": "D"
+},
+{
+"out": "\""
+},
+{
+"out": "\u001b[A\u001b[A\u001b[16D\u001b[36me\u001b[36mc\u001b[36mh\u001b[36mo\u001b[39m\u001b[1B\r\u001b[1m\u001b[34m;\u001b[0m\u001b[39m\u001b[36mp\u001b[36mr\u001b[36mi\u001b[36mn\u001b[36mt\u001b[36mf\u001b[39m \u001b[33m'\u001b[33m_\u001b[33m_\u001b[33mL\u001b[33mO\u001b[33mY\u001b[33mA\u001b[33m_\u001b[33mJ\u001b[33mO\u001b[33mB\u001b[33m_\u001b[33m_\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m_\u001b[33m_\u001b[33mE\u001b[33mN\u001b[33mD\u001b[33m_\u001b[33m_\u001b[33m\\\u001b[33mn\u001b[33m'\u001b[39m\u001b[1B\r\u001b[33m'\u001b[33mj\u001b[33mn\u001b[33ma\u001b[33mr\u001b[33m0\u001b[33m1\u001b[33m'\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35m?\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35mP\u001b[1m\u001b[35mW\u001b[1m\u001b[35mD\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m\u001b[?1l\u001b>\u001b[?2004l"
+},
+{
+"out": "\r\r\nhello world from a narrow pane\r\n__LOYA_JOB__jnar01|0|/home/user__END__\r\n                                        \r\r\u001b]0;user@kali: ~\u0007\r\n"
+},
+{
+"out": "\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[32m\u250c\u2500\u2500(\u001b[1m\u001b[32m\u001b[34muser\u327fkali\u001b[0m\u001b[34m\u001b[32m)-[\u001b[1m\u001b[32m\u001b[39m~\u001b[0m\u001b[32m]\r\n\u2514\u2500\u001b[1m\u001b[32m\u001b[34m$\u001b[0m\u001b[34m\u001b[39m \u001b[K\u001b[?1h\u001b=\u001b[?2004h"
+},
+{
+"submit": "ls )",
+"jobId": "jnar02",
+"sent": "ls ) ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jnar02' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "l"
+},
+{
+"out": "\bls"
+},
+{
+"out": " "
+},
+{
+"out": ")"
+},
+{
+"out": " "
+},
+{
+"out": ";"
+},
+{
+"out": "p"
+},
+{
+"out": "r"
+},
+{
+"out": "i"
+},
+{
+"out": "n"
+},
+{
+"out": "t"
+},
+{
+"out": "f"
+},
+{
+"out": " "
+},
+{
+"out": "'"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "L"
+},
+{
+"out": "O"
+},
+{
+"out": "Y"
+},
+{
+"out": "A"
+},
+{
+"out": "_"
+},
+{
+"out": "J"
+},
+{
+"out": "O"
+},
+{
+"out": "B"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "_"
+},
+{
+"out": "_ \r\u001b[K"
+},
+{
+"out": "\u001b[K"
+},
+{
+"out": "E"
+},
+{
+"out": "\rEN"
+},
+{
+"out": "D"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "\\"
+},
+{
+"out": "n"
+},
+{
+"out": "'"
+},
+{
+"out": " "
+},
+{
+"out": "'"
+},
+{
+"out": "j"
+},
+{
+"out": "n"
+},
+{
+"out": "a"
+},
+{
+"out": "r"
+},
+{
+"out": "0"
+},
+{
+"out": "2"
+},
+{
+"out": "'"
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "?"
+},
+{
+"out": "\""
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "P"
+},
+{
+"out": "W"
+},
+{
+"out": "D"
+},
+{
+"out": "\""
+},
+{
+"out": "\u001b[A\u001b[25D\u001b[36ml\u001b[36ms\u001b[39m \u001b[1m\u001b[31m)\u001b[0m\u001b[24m\u001b[39m \u001b[1m\u001b[34m;\u001b[0m\u001b[39m\u001b[36mp\u001b[36mr\u001b[36mi\u001b[36mn\u001b[36mt\u001b[36mf\u001b[39m \u001b[33m'\u001b[33m_\u001b[33m_\u001b[33mL\u001b[33mO\u001b[33mY\u001b[33mA\u001b[33m_\u001b[33mJ\u001b[33mO\u001b[33mB\u001b[33m_\u001b[33m_\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m_\u001b[33m_\u001b[33mE\u001b[33mN\u001b[33mD\u001b[33m_\u001b[33m_\u001b[33m\\\u001b[33mn\u001b[33m'\u001b[39m \u001b[33m'\u001b[33mj\u001b[33mn\u001b[33ma\u001b[33mr\u001b[33m0\u001b[33m2\u001b[33m'\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35m?\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35mP\u001b[1m\u001b[35mW\u001b[1m\u001b[35mD\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m"
+},
+{
+"out": "\u001b[?1l\u001b>\u001b[?2004l"
+},
+{
+"out": "\r\r\nzsh: parse error near `)'\r\n                                        \r\r\u001b]0;user@kali: ~\u0007\r\n"
+},
+{
+"out": "\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[32m\u250c\u2500\u2500(\u001b[1m\u001b[32m\u001b[34muser\u327fkali\u001b[0m\u001b[34m\u001b[32m)-[\u001b[1m\u001b[32m\u001b[39m~\u001b[0m\u001b[32m]\r\n\u2514\u2500\u001b[1m\u001b[32m\u001b[34m$\u001b[0m\u001b[34m\u001b[39m \u001b[K\u001b[?1h\u001b=\u001b[?2004h"
+},
+{
+"submit": "ls",
+"jobId": "jnar03",
+"sent": "ls ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jnar03' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "l"
+},
+{
+"out": "\bls"
+},
+{
+"out": " "
+},
+{
+"out": ";"
+},
+{
+"out": "p"
+},
+{
+"out": "r"
+},
+{
+"out": "i"
+},
+{
+"out": "n"
+},
+{
+"out": "t"
+},
+{
+"out": "f"
+},
+{
+"out": " "
+},
+{
+"out": "'"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "L"
+},
+{
+"out": "O"
+},
+{
+"out": "Y"
+},
+{
+"out": "A"
+},
+{
+"out": "_"
+},
+{
+"out": "J"
+},
+{
+"out": "O"
+},
+{
+"out": "B"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "|"
+},
+{
+"out": "%"
+},
+{
+"out": "s"
+},
+{
+"out": "_"
+},
+{
+"out": "_"
+},
+{
+"out": "E"
+},
+{
+"out": "N \r\u001b[K"
+},
+{
+"out": "\u001b[K"
+},
+{
+"out": "D"
+},
+{
+"out": "\rD_"
+},
+{
+"out": "_"
+},
+{
+"out": "\\"
+},
+{
+"out": "n"
+},
+{
+"out": "'"
+},
+{
+"out": " "
+},
+{
+"out": "'"
+},
+{
+"out": "j"
+},
+{
+"out": "n"
+},
+{
+"out": "a"
+},
+{
+"out": "r"
+},
+{
+"out": "0"
+},
+{
+"out": "3"
+},
+{
+"out": "'"
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "?"
+},
+{
+"out": "\""
+},
+{
+"out": " "
+},
+{
+"out": "\""
+},
+{
+"out": "$"
+},
+{
+"out": "P"
+},
+{
+"out": "W"
+},
+{
+"out": "D"
+},
+{
+"out": "\""
+},
+{
+"out": "\u001b[A\u001b[23D\u001b[36ml\u001b[36ms\u001b[39m \u001b[1m\u001b[34m;\u001b[0m\u001b[39m\u001b[36mp\u001b[36mr\u001b[36mi\u001b[36mn\u001b[36mt\u001b[36mf\u001b[39m \u001b[33m'\u001b[33m_\u001b[33m_\u001b[33mL\u001b[33mO\u001b[33mY\u001b[33mA\u001b[33m_\u001b[33mJ\u001b[33mO\u001b[33mB\u001b[33m_\u001b[33m_\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m|\u001b[33m%\u001b[33ms\u001b[33m_\u001b[33m_\u001b[33mE\u001b[33mN\u001b[33mD\u001b[33m_\u001b[33m_\u001b[33m\\\u001b[33mn\u001b[33m'\u001b[39m \u001b[33m'\u001b[33mj\u001b[33mn\u001b[33ma\u001b[33mr\u001b[33m0\u001b[33m3\u001b[33m'\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35m?\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m \u001b[33m\"\u001b[1m\u001b[35m$\u001b[1m\u001b[35mP\u001b[1m\u001b[35mW\u001b[1m\u001b[35mD\u001b[0m\u001b[39m\u001b[33m\"\u001b[39m\u001b[?1l\u001b>"
+},
+{
+"out": "\u001b[?2004l"
+},
+{
+"out": "\r\r\n"
+},
+{
+"out": "alpha.txt\r\n"
+},
+{
+"out": "__LOYA_JOB__jnar03|0|/home/user__END__\r\n                                        \r\r"
+},
+{
+"out": "\u001b]0;user@kali: ~\u0007\r\n"
+},
+{
+"out": "\r\u001b[0m\u001b[27m\u001b[24m\u001b[J\u001b[32m\u250c\u2500\u2500(\u001b[1m\u001b[32m\u001b[34muser\u327fkali\u001b[0m\u001b[34m\u001b[32m)-[\u001b[1m\u001b[32m\u001b[39m~\u001b[0m\u001b[32m]\r\n\u2514\u2500\u001b[1m\u001b[32m\u001b[34m$\u001b[0m\u001b[34m\u001b[39m \u001b[K\u001b[?1h\u001b=\u001b[?2004h"
+}
+]
+}

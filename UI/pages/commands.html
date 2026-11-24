@@ -1,0 +1,28 @@
+<div class="cmds-toolbar">
+<div class="cmds-search"><i class="icon icon-search"></i><input type="text" id="cmdsSearchInput" placeholder="Search commands..."></div>
+<select class="cmds-filter" id="cmdsCategoryFilter"><option value="">All Categories</option></select>
+<select class="cmds-filter" id="cmdsLinkFilter" title="Filter by link"><option value="">All</option><option value="linked">Linked</option><option value="standalone">Not Linked</option></select>
+<button class="cmds-new-btn" id="cmdsNewBtn"><i class="icon icon-add"></i><span>New Command</span></button>
+</div>
+<div class="cmds-table-wrap glass-panel" id="cmdsTableWrap">
+<table class="cmds-table">
+<thead><tr>
+<th data-sort="title">Title</th>
+<th data-sort="command_type">Shell</th>
+<th data-sort="noise_level">Noise</th>
+<th data-sort="category">Category</th>
+<th data-sort="sub">Sub Category</th>
+<th data-sort="command">Command</th>
+<th data-sort="description">Description</th>
+<th data-sort="tags">Tags</th>
+<th class="cmds-col-src">Type</th>
+<th class="cmds-col-run"></th>
+</tr></thead>
+<tbody id="cmdsTableBody"></tbody>
+</table>
+<div class="cmds-empty-msg hidden" id="cmdsEmptyMsg">No commands found</div>
+<div class="cmds-footer"><span class="cmds-total" id="cmdsTotal"></span><div class="cmds-pager"><button type="button" class="cmds-page-btn" id="cmdsPagePrev" title="Previous page"><i class="icon icon-arrow-left"></i></button><span class="cmds-page-label" id="cmdsPageLabel">1 of 1</span><button type="button" class="cmds-page-btn" id="cmdsPageNext" title="Next page"><i class="icon icon-arrow-right"></i></button></div><div class="cmds-per-page"><select class="cmds-filter" id="cmdsPageSize"><option value="10">10</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select><span>per page</span></div></div>
+</div>
+<datalist id="cmdsNoteHistory"></datalist>
+<datalist id="cmdsCategoryHistory"></datalist>
+<datalist id="cmdsSubHistory"></datalist>

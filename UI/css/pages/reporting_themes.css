@@ -1,0 +1,56 @@
+/* Reporting: report design picker (window.ReportThemes). Classes are prefixed rth-. The mock-ups are paper: they keep their own
+   colours in every app theme. */
+.rth{display:flex;flex-direction:column;gap:12px;min-width:0;font-family:var(--font-ui);color:var(--text)}
+.rth-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rth-card{display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;padding:10px;border-radius:12px;border:1px solid var(--glass-border);background:var(--rpt-field-bg,transparent);color:var(--text);font-family:inherit;text-align:left;cursor:pointer;transition:border-color 0.15s ease,box-shadow 0.15s ease}
+.rth-card:hover{border-color:var(--accent-a)}
+.rth-card:focus-visible{outline:2px solid var(--accent-a);outline-offset:1px}
+.rth-card.active{border-color:var(--accent-a);background:linear-gradient(135deg,var(--accent-a-soft),var(--accent-b-soft));box-shadow:0 0 0 1px var(--accent-a) inset}
+.rth-card-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rth-card-name{font-size:13px;font-weight:700}
+.rth-card-desc{font-size:11px;line-height:1.35;color:var(--text-dim);white-space:normal}
+.rth-card.active .rth-card-desc{color:var(--text)}
+.rth-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rth-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.rth-field-label{font-size:11px;font-weight:600;color:var(--text-dim)}
+.rth-select{width:100%;font-family:inherit}
+/* mock-up: a cover and a content page */
+.rth-mock{display:flex;gap:7px;justify-content:center;padding:9px 8px;border-radius:8px;background:#dfe4ec;-webkit-user-select:none;user-select:none;pointer-events:none}
+.rth-pg{position:relative;display:flex;flex-direction:column;flex:0 1 74px;min-width:0;aspect-ratio:210/297;background:#fff;box-shadow:0 1px 4px rgba(15,23,42,0.22);overflow:hidden}
+.rth-b{display:block;border-radius:1px}
+.rth-cover .rth-band{display:flex;flex-direction:column;gap:3px;padding:7% 9%;background:var(--rth-accent);flex:0 0 52%;justify-content:flex-end}
+.rth-cover .rth-logo{width:26%;height:5px;background:var(--rth-on);opacity:0.9;margin-bottom:auto}
+.rth-cover .rth-t1{width:82%;height:5px;background:var(--rth-on)}
+.rth-cover .rth-t2{width:54%;height:5px;background:var(--rth-on)}
+.rth-cover .rth-facts{display:grid;grid-template-columns:1fr 1fr;gap:5px 6px;padding:9% 9% 0}
+.rth-cover .rth-f{height:3px;background:#c5ccd6}
+.rth-cv-band .rth-band{border-bottom:2px solid var(--rth-secondary)}
+.rth-cv-full{background:var(--rth-accent)}
+.rth-cv-full .rth-band{flex-basis:66%}
+.rth-cv-full .rth-f{background:var(--rth-on);opacity:0.55}
+.rth-cv-simple .rth-band{background:#fff;border-bottom:1.5px solid var(--rth-accent);margin:0 9%;padding:7% 0 6%;flex-basis:50%}
+.rth-cv-simple .rth-logo,.rth-cv-simple .rth-t1,.rth-cv-simple .rth-t2{background:var(--rth-text)}
+.rth-cv-simple .rth-logo{opacity:0.55}
+.rth-page{padding:9% 9% 0;gap:3px}
+.rth-h{font-size:11px;line-height:1;font-weight:800;color:var(--rth-accent);font-family:var(--font-ui)}
+.rth-h.serif{font-family:Georgia,Cambria,"Times New Roman","DejaVu Serif",serif}
+.rth-hr{height:1.5px;background:var(--rth-accent);margin-bottom:2px}
+.rth-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-bottom:2px}
+.rth-tile{height:7px;background:var(--rth-soft);border-top:2px solid var(--rth-sev)}
+.rth-l{height:2.5px;background:#c5ccd6}
+.rth-l.short{width:64%;margin-bottom:2px}
+.rth-th{height:5px;background:var(--rth-head)}
+.rth-tr{display:flex;align-items:center;justify-content:space-between;gap:4px;padding:1.5px 0;border-bottom:1px solid var(--rth-rule)}
+.rth-td{flex:1;height:2.5px;background:#c5ccd6}
+.rth-sv{flex:0 0 26%;height:4px;border-radius:2px;background:var(--rth-sev)}
+.rth-sv.outline{background:#fff;border:1px solid var(--rth-sev);height:4px}
+.rth-modern .rth-h{font-size:15px;color:var(--rth-accent)}
+.rth-modern .rth-hr{width:34%;height:2.5px}
+.rth-modern .rth-tile{background:#fff;border-top-width:3px;border-bottom:1px solid var(--rth-rule)}
+.rth-modern .rth-sv{border-radius:4px}
+.rth-minimal .rth-h{color:var(--rth-text)}
+.rth-minimal .rth-hr{height:1px;background:var(--rth-text)}
+.rth-minimal .rth-tile{background:#fff;border-top:none;border-bottom:1px solid var(--rth-rule);position:relative}
+.rth-minimal .rth-tile:before{content:"";position:absolute;left:1px;top:1.5px;width:3px;height:3px;border-radius:50%;background:var(--rth-sev)}
+.rth-minimal .rth-th{height:4px;background:#fff;border-top:1px solid var(--rth-text);border-bottom:1px solid var(--rth-text)}
+@media (max-width:640px){.rth-cards{grid-template-columns:1fr}.rth-row{grid-template-columns:1fr}}

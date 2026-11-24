@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html data-theme="dark" data-style="glass">
+<head>
+<meta charset="utf-8">
+<title>LOYA NG</title>
+<link rel="stylesheet" href="../css/theme.css">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/layout.css">
+<link rel="stylesheet" href="../css/live-target-badge.css">
+<link rel="stylesheet" href="../css/components.css">
+<link rel="stylesheet" href="../css/pages/dashboard.css">
+<link rel="stylesheet" href="../css/pages/notes.css">
+<link rel="stylesheet" href="../css/pages/notes_editor.css">
+<link rel="stylesheet" href="../css/pages/reporting.css">
+<link rel="stylesheet" href="../css/pages/reporting_findings.css">
+<link rel="stylesheet" href="../css/pages/reporting_targets.css">
+<link rel="stylesheet" href="../css/pages/reporting_export.css">
+<link rel="stylesheet" href="../css/pages/reporting_themes.css">
+<link rel="stylesheet" href="../css/pages/reporting_ai.css">
+<link rel="stylesheet" href="../css/report-evidence.css">
+<link rel="stylesheet" href="../css/pages/commands.css">
+<link rel="stylesheet" href="../css/pages/chains.css">
+<link rel="stylesheet" href="../css/chains-history.css">
+<link rel="stylesheet" href="../css/pages/targets.css">
+<link rel="stylesheet" href="../css/pages/snippets.css">
+<link rel="stylesheet" href="../css/pages/settings.css">
+<link rel="stylesheet" href="../css/terminal.css">
+<link rel="stylesheet" href="../css/action-chains.css">
+<link rel="stylesheet" href="../css/ai.css">
+<link rel="stylesheet" href="../css/panel-dock.css">
+<link rel="stylesheet" href="../css/ext-agents.css">
+<link rel="stylesheet" href="../css/palette.css">
+<link rel="stylesheet" href="../css/update-notice.css">
+<link rel="stylesheet" href="../css/pages/cve.css">
+<link rel="stylesheet" href="../css/cve-settings.css">
+<link rel="stylesheet" href="../css/terminal-shells.css">
+<link rel="stylesheet" href="../css/flow-editor.css">
+<link rel="stylesheet" href="../css/flow-panels.css">
+<link rel="stylesheet" href="../css/chains-fields.css">
+<link rel="stylesheet" href="../css/chains-icons.css">
+<link rel="stylesheet" href="../css/chains-studio.css">
+<link rel="stylesheet" href="../css/glass.css">
+<script src="../js/appearance-boot.js"></script>
+</head>
+<body>
+<div class="blob blob-a"></div>
+<div class="blob blob-b"></div>
+<div id="root" class="shell">
+<header id="titlebar" class="titlebar glass-panel">
+<img class="titlebar-icon" src="../../Assets/logox.png" alt="">
+<span class="titlebar-title" id="titlebarTitle">LOYA NG</span>
+<span class="titlebar-version-badge" id="titlebarVersion"></span>
+<button type="button" class="titlebar-live hidden" id="titlebarLive" aria-haspopup="dialog" aria-expanded="false"><span class="titlebar-live-dot" aria-hidden="true"></span><span class="titlebar-live-name" id="titlebarLiveName"></span></button>
+<button type="button" class="titlebar-search" id="titlebarSearchBtn"><i class="icon icon-search"></i><span id="titlebarSearchLabel">Search...</span></button>
+<div class="titlebar-spacer"></div>
+<button class="titlebar-btn" id="btnToastHistory" title="Notification History"><i class="icon icon-bell"></i><span class="titlebar-badge hidden" id="titlebarNotifyBadge"></span></button>
+<button class="titlebar-btn" id="btnShortcuts" title="Keyboard Shortcuts (Ctrl+/)"><i class="icon icon-info"></i></button>
+<button class="titlebar-btn" id="btnShrink" title="Mini window"><i class="icon icon-shrink"></i></button>
+<button class="titlebar-btn" id="btnMin" title="Minimize"><i class="icon icon-minimize"></i></button>
+<button class="titlebar-btn" id="btnMax" title="Maximize"><i class="icon icon-maximize" id="btnMaxIcon"></i></button>
+<button class="titlebar-btn titlebar-btn-close" id="btnClose" title="Close"><i class="icon icon-close"></i></button>
+</header>
+<div id="bodyRow" class="body-row">
+<aside id="aiPanel" class="ai-panel hidden">
+<div class="ai-resize-handle" id="aiResizeHandle"></div>
+<div class="ai-panel-head">
+<div class="ai-provider-select-wrap"><span class="ai-status-dot" id="aiStatusDot"></span><select class="ai-provider-select" id="aiProviderSelect"></select></div>
+<span class="ai-usage-label" id="aiUsageLabel"></span>
+<div class="ai-panel-head-actions">
+<button type="button" class="terminal-head-btn" id="aiHistoryBtn" title="Chat sessions"><i class="icon icon-list"></i></button>
+<button type="button" class="terminal-head-btn" id="aiNewSessionBtn" title="New Conversation"><i class="icon icon-add"></i></button>
+<button type="button" class="terminal-head-btn ai-clear-btn" id="aiClearSessionBtn" title="Clear session">Clear</button>
+<button type="button" class="terminal-head-btn panel-dock-grip" id="aiDockBtn" title="Panel position - click for the menu, or drag to an edge to dock"><i class="icon icon-grip"></i></button>
+<button type="button" class="terminal-head-btn" id="aiCloseBtn" title="Close"><i class="icon icon-close"></i></button>
+</div>
+</div>
+<div class="ai-panel-body" id="aiPanelBody">
+<div class="ai-chat-messages" id="aiChatMessages"><div class="ai-placeholder" id="aiChatEmpty"><i class="icon icon-brain"></i><p>Enable a provider in Settings to start chatting.</p></div></div>
+<div class="ai-chat-input-row">
+<textarea id="aiChatInput" class="ai-chat-input" placeholder="Ask the AI..." rows="1"></textarea>
+<button type="button" class="ai-chat-send-btn" id="aiChatSendBtn"><i class="icon icon-arrow-right"></i></button>
+</div>
+</div>
+</aside>
+<div id="workArea" class="work-area">
+<main id="content" class="content">
+<section class="page" data-page="dashboard"></section>
+<section class="page" data-page="notes"></section>
+<section class="page" data-page="reporting"></section>
+<section class="page" data-page="commands"></section>
+<section class="page" data-page="chains"></section>
+<section class="page" data-page="cve"></section>
+<section class="page" data-page="targets"></section>
+<section class="page" data-page="snippets"></section>
+<section class="page" data-page="settings"></section>
+</main>
+<aside id="terminalPanel" class="terminal-panel hidden">
+<div class="terminal-resize-handle" id="terminalResizeHandle"></div>
+<div class="terminal-panel-head">
+<div class="terminal-panel-actions">
+<div class="terminal-panel-actions-left">
+<button type="button" class="terminal-head-btn" id="terminalElevateBtn" title="Run elevated"><i class="icon icon-elevate"></i></button>
+<button type="button" class="terminal-head-btn terminal-head-btn-text" id="terminalClearBtn" title="Clear output">Clear</button>
+</div>
+<div class="terminal-panel-actions-right">
+<button type="button" class="terminal-head-btn" id="terminalIocBtn" title="Extract indicators"><i class="icon icon-ioc"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalSearchBtn" title="Search output (Ctrl+F)"><i class="icon icon-search"></i></button>
+<button type="button" class="terminal-head-btn active" id="terminalBlocksBtn" title="Group output into job blocks"><i class="icon icon-table"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalJobsBtn" title="Jobs"><i class="icon icon-list"></i><span class="terminal-jobs-badge hidden" id="terminalJobsBadge"></span></button>
+<button type="button" class="terminal-head-btn" id="terminalRecordBtn" title="Record this session for the report"><i class="icon icon-report"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalSaveBtn" title="Save session output"><i class="icon icon-save"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalAiBtn" title="Ask the AI about this session"><i class="icon icon-brain"></i></button>
+<button type="button" class="terminal-head-btn hidden" id="terminalMoreBtn" title="More actions" aria-haspopup="menu"><i class="icon icon-dots"></i></button>
+<button type="button" class="terminal-head-btn panel-dock-grip" id="terminalLayoutBtn" title="Panel position - click for the menu, or drag to an edge to dock"><i class="icon icon-grip"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalMaximizeBtn" title="Maximize panel (Ctrl+Shift+Enter)"><i class="icon icon-maximize" id="terminalMaximizeIcon"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalCloseBtn" title="Close terminal"><i class="icon icon-close"></i></button>
+</div>
+</div>
+<div class="terminal-panel-tabs-row">
+<div class="terminal-tabs" id="terminalTabs"></div>
+<select id="terminalShellSelect" class="terminal-shell-select" data-drop-down="down"></select>
+<button type="button" class="terminal-head-btn" id="terminalSessionsBtn" title="Saved and recently closed sessions"><i class="icon icon-folder"></i></button>
+<button type="button" class="terminal-head-btn terminal-split-btn" id="terminalSplitBtn" title="Split layout"></button>
+</div>
+</div>
+<div class="terminal-jobs-drawer hidden" id="terminalJobsDrawer">
+<div class="terminal-jobs-head">
+<span class="terminal-jobs-title">Jobs</span>
+<div class="terminal-jobs-filters" id="terminalJobsFilters">
+<button type="button" class="terminal-jobs-filter active" data-state="all">All</button>
+<button type="button" class="terminal-jobs-filter" data-state="running">Running</button>
+<button type="button" class="terminal-jobs-filter" data-state="failed">Failed</button>
+<button type="button" class="terminal-jobs-filter" data-state="session">This session</button>
+</div>
+<button type="button" class="terminal-head-btn" id="terminalJobsRefreshBtn" title="Refresh"><i class="icon icon-refresh"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalJobsClearBtn" title="Dismiss finished jobs"><i class="icon icon-trash"></i></button>
+</div>
+<div class="terminal-jobs-list" id="terminalJobsList"></div>
+</div>
+<div class="terminal-sessions-drawer hidden" id="terminalSessionsDrawer"></div>
+<div class="terminal-search-bar hidden" id="terminalSearchBar">
+<i class="icon icon-search"></i>
+<input type="text" id="terminalSearchInput" class="terminal-search-input" placeholder="Search output..." autocomplete="off" spellcheck="false">
+<span class="terminal-search-status" id="terminalSearchStatus"></span>
+<button type="button" class="terminal-head-btn terminal-head-btn-text" id="terminalSearchRegex" title="Regular expression">.*</button>
+<button type="button" class="terminal-head-btn terminal-head-btn-text" id="terminalSearchFilter" title="Show only matching lines">Filter</button>
+<button type="button" class="terminal-head-btn" id="terminalSearchPrev" title="Previous match"><i class="icon icon-arrow-up"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalSearchNext" title="Next match"><i class="icon icon-arrow-down"></i></button>
+<button type="button" class="terminal-head-btn" id="terminalSearchClose" title="Close search"><i class="icon icon-close"></i></button>
+</div>
+<div class="terminal-panes" id="terminalPanes" data-layout="single"></div>
+<div class="terminal-status-bar"><span class="terminal-status-shell" id="terminalStatusShell"></span><span class="terminal-status-cwd" id="terminalStatusCwd"></span><span class="terminal-status-exit hidden" id="terminalStatusExit"></span></div>
+<div class="terminal-input-row"><textarea id="terminalInput" class="terminal-input" rows="1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea></div>
+</aside>
+</div>
+</div>
+<nav id="bottomNav" class="bottom-nav glass-panel">
+<div class="bottom-nav-handle"></div>
+<div class="bottom-nav-row" id="bottomNavRow">
+<div class="bottom-nav-group" id="bottomNavLeft">
+<button class="nav-btn" data-page="dashboard"><i class="icon icon-home"></i><span>Dashboard</span></button>
+<button class="nav-btn" data-page="notes"><i class="icon icon-edit"></i><span>Notes</span></button>
+<button class="nav-btn" data-page="reporting" title="Write and export penetration-test reports"><i class="icon icon-report"></i><span>Reporting</span></button>
+<button class="nav-btn" data-page="commands"><i class="icon icon-commands"></i><span>Commands</span></button>
+<button class="nav-btn" data-page="chains" title="Action Chains - run saved commands one after another, or type /caller in the terminal"><i class="icon icon-chain"></i><span>Chains</span></button>
+</div>
+<button type="button" class="ai-toggle-btn hidden" id="aiToggleBtn" title="AI Assistant"><i class="icon icon-brain"></i></button>
+<div class="bottom-nav-group" id="bottomNavRight">
+<button type="button" class="nav-btn dock-terminal-btn hidden" id="dockTerminalBtn" title="Open or close the terminal panel"><i class="icon icon-command-line"></i><span>Terminal</span></button>
+<button class="nav-btn" data-page="cve" title="Look up CVEs, see how to protect against them, and follow the newest ones"><i class="icon icon-shield"></i><span>CVE Intel</span></button>
+<button class="nav-btn" data-page="targets"><i class="icon icon-target"></i><span>Targets</span></button>
+<button class="nav-btn" data-page="snippets" title="Your saved commands, filled in for the live target - copy or run"><i class="icon icon-play"></i><span>Quick Run</span></button>
+<button class="nav-btn" data-page="settings"><i class="icon icon-settings"></i><span>Settings</span></button>
+</div>
+</div>
+</nav>
+<div id="resizeN" class="resize-edge resize-edge-n"></div>
+<div id="resizeS" class="resize-edge resize-edge-s"></div>
+<div id="resizeW" class="resize-edge resize-edge-w"></div>
+<div id="resizeE" class="resize-edge resize-edge-e"></div>
+<div id="resizeNW" class="resize-corner resize-corner-nw"></div>
+<div id="resizeNE" class="resize-corner resize-corner-ne"></div>
+<div id="resizeSW" class="resize-corner resize-corner-sw"></div>
+<div id="resizeSE" class="resize-corner resize-corner-se"></div>
+</div>
+<div class="lock-overlay hidden" id="lockOverlay">
+<div class="lock-box glass-panel">
+<img class="lock-icon" src="../../Assets/logox.png" alt="">
+<div class="lock-title" id="lockTitle">LOYA NG is locked</div>
+<div class="lock-subtitle" id="lockSubtitle">Enter your PIN to open LOYA NG.</div>
+<input type="password" id="lockPinInput" class="lock-input" placeholder="Enter PIN">
+<div class="lock-error hidden" id="lockError"></div>
+<button class="lock-submit" id="lockSubmitBtn">Unlock</button>
+</div>
+</div>
+<div class="palette-overlay hidden" id="paletteOverlay">
+<div class="palette-box glass-panel" id="paletteBox">
+<div class="palette-input-row"><i class="icon icon-search"></i><input type="text" id="paletteInput" class="palette-input" placeholder="Search notes, commands, targets... or type an action" autocomplete="off" spellcheck="false"></div>
+<div class="palette-results" id="paletteResults"></div>
+</div>
+</div>
+<script src="../js/bridge.js"></script>
+<script src="../js/components/nav-guard.js"></script>
+<script src="../js/components/titlebar.js"></script>
+<script src="../js/components/live-target-badge.js"></script>
+<script src="../js/components/nav.js"></script>
+<script src="../js/components/resize.js"></script>
+<script src="../js/components/theme.js"></script>
+<script src="../js/components/card-size-picker.js"></script>
+<script src="../js/components/card.js"></script>
+<script src="../js/components/toast.js"></script>
+<script src="../js/components/status-island.js"></script>
+<script src="../js/components/shortcuts.js"></script>
+<script src="../js/components/onboarding.js"></script>
+<script src="../js/components/confirm-dialog.js"></script>
+<script src="../js/components/lock-screen.js"></script>
+<script src="../js/components/context-menu.js"></script>
+<script src="../js/components/ui-select.js"></script>
+<script src="../js/components/modal.js"></script>
+<script src="../js/components/side-panel-resize.js"></script>
+<script src="../js/components/panel-dock.js"></script>
+<script src="../js/components/terminal.js"></script>
+<script src="../js/components/action-chains.js"></script>
+<script src="../js/components/ai.js"></script>
+<script src="../js/components/ai-chain-card.js"></script>
+<script src="../js/components/ai-dock.js"></script>
+<script src="../js/components/ext-agents.js"></script>
+<script src="../js/components/ext-connections.js"></script>
+<script src="../js/components/palette.js"></script>
+<script src="../js/pages/dashboard.js"></script>
+<script src="../js/components/markdown.js"></script>
+<script src="../js/pages/notes_pro_core.js"></script>
+<script src="../js/pages/notes_editor_core.js"></script>
+<script src="../js/pages/notes_draw.js"></script>
+<script src="../js/pages/notes_sidebar_core.js"></script>
+<script src="../js/pages/notes.js"></script>
+<script src="../js/pages/notes_sidebar.js"></script>
+<script src="../js/pages/notes_pro.js"></script>
+<script src="../js/pages/notes_editor.js"></script>
+<script src="../js/pages/reporting_core.js"></script>
+<script src="../js/pages/reporting_widgets.js"></script>
+<script src="../js/pages/reporting_targets.js"></script>
+<script src="../js/pages/reporting_cve_core.js"></script>
+<script src="../js/pages/reporting_findings.js"></script>
+<script src="../js/components/report-evidence.js"></script>
+<script src="../js/pages/reporting_export.js"></script>
+<script src="../js/pages/reporting_themes.js"></script>
+<script src="../js/pages/reporting_ai.js"></script>
+<script src="../js/pages/reporting.js"></script>
+<script src="../js/pages/commands.js"></script>
+<script src="../js/pages/chains.js"></script>
+<script src="../js/components/flow-catalog.js"></script>
+<script src="../js/components/flow-model.js"></script>
+<script src="../js/components/flow-rules.js"></script>
+<script src="../js/components/flow-editor.js"></script>
+<script src="../js/components/flow-fields.js"></script>
+<script src="../js/components/flow-inspector.js"></script>
+<script src="../js/components/flow-run.js"></script>
+<script src="../js/components/flow-log.js"></script>
+<script src="../js/pages/chains_flow.js"></script>
+<script src="../js/pages/chains_history.js"></script>
+<script src="../js/pages/targets.js"></script>
+<script src="../js/pages/snippets.js"></script>
+<script src="../js/pages/cve_core.js"></script>
+<script src="../js/pages/cve_notes.js"></script>
+<script src="../js/pages/cve.js"></script>
+<script src="../js/components/cve-settings.js"></script>
+<script src="../js/components/terminal-shells.js"></script>
+<script src="../js/components/flow-settings.js"></script>
+<script src="../js/pages/settings.js"></script>
+<script src="../js/components/update-notice.js"></script>
+<script src="../js/app.js"></script>
+</body>
+</html>

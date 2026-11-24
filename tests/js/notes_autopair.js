@@ -1,0 +1,26 @@
+// VS Code-style auto-closing pairs in the note editor.
+const N=require("../../UI/js/pages/notes_pro_core.js")
+let passed=0,failed=0
+function check(name,ok,detail){if(ok)passed++;else{failed++;console.log("FAIL: "+name+(detail?" - "+detail:""))}}
+const d=(ch,prev,next,sel,line)=>N.autoPairDecision(ch,prev,next,!!sel,line===undefined?"x ":line)
+const act=(r)=>r?r.act:null
+check("( pairs at end of line",act(d("(","x",""))==="pair"&&d("(","x","").close===")")
+check("{ pairs before a space",act(d("{"," "," "))==="pair")
+check("[ pairs before a closer",act(d("[","(",")"))==="pair")
+check("( does not pair before a word",act(d("(","","abc"))===null)
+check("typing ) before ) skips over",act(d(")","a",")"))==="skip")
+check("typing \" before \" skips over",act(d('"',"a",'"'))==="skip")
+check("selection gets wrapped",act(d("[","","",true))==="wrap")
+check("selection with a quote is wrapped",act(d('"',"","",true))==="wrap")
+check("non-pair key with selection does nothing",d("a","","",true)===null)
+check("apostrophe after a letter does not pair (don't)",act(d("'","n",""))===null)
+check("quote before a word does not pair",act(d('"'," ","word"))===null)
+check("quote after a space pairs",act(d('"'," ",""))==="pair")
+check("backtick at line start is left for ``` fences",act(d("`","","",false,""))===null)
+check("second/third backtick at line start too",act(d("`","`","",false,"``"))===null)
+check("backtick mid-line pairs for inline code",act(d("`"," ","",false,"run "))==="pair")
+check("backspace in empty () removes both",N.autoPairBackspace("(",")")===true)
+check("backspace in empty \"\" removes both",N.autoPairBackspace('"','"')===true)
+check("backspace elsewhere is normal",N.autoPairBackspace("a",")")===false&&N.autoPairBackspace("","")===false)
+console.log(passed+" passed, "+failed+" failed")
+process.exit(failed?1:0)

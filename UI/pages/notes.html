@@ -1,0 +1,75 @@
+<div class="notes-draft-banner hidden" id="notesDraftBanner">
+<span>You have unsaved changes from a previous session.</span>
+<div class="notes-draft-actions"><button id="notesDraftEdit">Edit Draft</button><button id="notesDraftDiscard">Discard</button><button id="notesDraftDismiss">Later</button></div>
+</div>
+<datalist id="notesCmdCategoryHistory"></datalist>
+<datalist id="notesCmdSubHistory"></datalist>
+<div class="notes-layout">
+<aside class="notes-sidebar glass-panel" id="notesSidebar" aria-label="Notes list">
+<div class="notes-search" id="notesSearchBox"><i class="icon icon-search"></i><input type="text" id="notesSearchInput" placeholder="Search notes...   /" autocomplete="off" spellcheck="false" aria-label="Search notes" aria-controls="notesGroups" title="Search notes (/ or Ctrl+Shift+F). Up/Down to move, Enter to open, Esc to clear."><button type="button" class="notes-search-clear hidden" id="notesSearchClear" title="Clear search (Esc)" aria-label="Clear search"><i class="icon icon-close"></i></button></div>
+<div class="notes-sb-scopes hidden" id="notesSbScopes" role="group" aria-label="Search in"><span class="notes-sb-scopes-label">Search in</span><button type="button" class="notes-sb-chip" data-scope="name" aria-pressed="true" title="Note and group names">Name</button><button type="button" class="notes-sb-chip" data-scope="tags" aria-pressed="true">Tags</button><button type="button" class="notes-sb-chip" data-scope="content" aria-pressed="false" title="The text and commands inside every note">Content</button></div>
+<div class="notes-new-row"><button class="notes-new-btn" id="notesNewBtn"><i class="icon icon-add"></i><span>Add New Note</span></button><button type="button" class="notes-tpl-btn" id="notesTemplatesBtn" title="New from Template" aria-label="New from Template"><i class="icon icon-copy"></i></button><button type="button" class="notes-tpl-btn" id="notesNewGroupBtn" title="New Group (right-click a group to rename, colour or delete it)" aria-label="New Group"><i class="icon icon-folder"></i></button></div>
+<div class="notes-sb-views" id="notesSbViews" role="tablist" aria-label="Organise notes by"><button type="button" role="tab" data-view="groups" aria-selected="true" title="By group (Parent/Child names nest)">Groups</button><button type="button" role="tab" data-view="tags" aria-selected="false" tabindex="-1" title="By tag">Tags</button><button type="button" role="tab" data-view="recent" aria-selected="false" tabindex="-1" title="By date: today, yesterday, last 7 days...">Recent</button><button type="button" role="tab" data-view="targets" aria-selected="false" tabindex="-1" title="By the targets of the active profile that a note mentions">Targets</button></div>
+<div class="notes-sb-filters" id="notesSbFilters" role="group" aria-label="Filters"><button type="button" class="notes-sb-chip" data-filter="pinned" data-label="Pinned" aria-pressed="false" title="Only pinned notes"><span>Pinned</span><span class="notes-sb-chip-n">0</span></button><button type="button" class="notes-sb-chip" data-filter="findings" data-label="Findings" aria-pressed="false" title="Only notes with a finding or vulnerability callout"><span>Findings</span><span class="notes-sb-chip-n">0</span></button><button type="button" class="notes-sb-chip" data-filter="commands" data-label="Commands" aria-pressed="false" title="Only notes with command blocks"><span>Commands</span><span class="notes-sb-chip-n">0</span></button><button type="button" class="notes-sb-chip" data-filter="untagged" data-label="Untagged" aria-pressed="false" title="Only notes without tags"><span>Untagged</span><span class="notes-sb-chip-n">0</span></button></div>
+<div class="notes-sb-bar"><span class="notes-sb-count" id="notesSbCount" aria-live="polite"></span><button type="button" class="notes-sb-tool notes-sb-sort" id="notesSbSort" aria-haspopup="menu"><span id="notesSbSortLabel">Name</span><i class="icon icon-arrow-up"></i></button><button type="button" class="notes-sb-tool" id="notesSbToggleAll" title="Collapse all" aria-label="Collapse all"><i class="icon icon-shrink"></i></button><button type="button" class="notes-sb-tool" id="notesSbOptions" title="View options: density, nesting, recently opened" aria-label="View options" aria-haspopup="menu"><i class="icon icon-dots-vertical"></i></button></div>
+<div class="notes-sb-listwrap"><div class="notes-groups" id="notesGroups" role="tree" tabindex="0" aria-label="Notes" aria-busy="true"><div class="notes-sb-skel" aria-hidden="true"><div class="notes-sb-skel-row" style="--w:62%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:80%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:54%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:72%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:66%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:48%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:76%"><span></span><span></span></div><div class="notes-sb-skel-row" style="--w:58%"><span></span><span></span></div></div></div><div class="notes-sb-sticky hidden" id="notesSbSticky" aria-hidden="true"></div><button type="button" class="notes-sb-jump hidden" id="notesSbJump" title="Scroll to the open note"><i class="icon icon-target"></i><span>Current note</span></button></div>
+</aside>
+<div class="notes-sb-resize" id="notesSbResize" role="separator" aria-orientation="vertical" aria-label="Resize the notes list" tabindex="0" title="Drag to resize, double-click to reset"></div>
+<section class="notes-viewer glass-panel">
+<div class="notes-tab-strip hidden" id="notesTabStrip"></div>
+<div class="notes-viewer-empty" id="notesViewerEmpty"><i class="icon icon-edit"></i><p>Select a note to view</p></div>
+<div class="notes-viewer-content hidden" id="notesViewerContent">
+<div class="notes-viewer-head">
+<div class="notes-viewer-headline"><div class="notes-viewer-title-row"><h2 id="notesViewerTitle"></h2><span class="notes-viewer-updated-badge" id="notesViewerUpdated"></span></div></div>
+<div class="notes-viewer-head-actions"><button class="notes-edit-btn" id="notesSummarizeBtn"><i class="icon icon-star-filled"></i><span>Summarize</span></button><button class="notes-edit-btn" id="notesPinBtn"><i class="icon icon-pin"></i><span>Pin</span></button><button class="notes-edit-btn" id="notesHistoryBtn"><i class="icon icon-list"></i><span>History</span></button><button class="notes-edit-btn" id="notesGraphBtn"><i class="icon icon-link"></i><span>Graph</span></button><button class="notes-edit-btn" id="notesEditBtn"><i class="icon icon-edit"></i><span>Edit</span></button><button class="notes-edit-btn notes-delete-btn" id="notesDeleteBtn"><i class="icon icon-close"></i><span>Delete</span></button></div>
+</div>
+<div class="notes-viewer-meta-row"><div class="notes-viewer-meta"><span id="notesViewerGroup"></span></div><div class="notes-viewer-tags" id="notesViewerTags"></div></div>
+<div class="note-body" id="notesViewerBody"></div>
+<div class="notes-linked hidden" id="notesLinksToSection">
+<div class="notes-linked-title">Links to</div>
+<div class="notes-linked-list" id="notesLinksToList"></div>
+</div>
+<div class="notes-linked hidden" id="notesLinkedSection">
+<div class="notes-linked-title">Linked from</div>
+<div class="notes-linked-list" id="notesLinkedList"></div>
+</div>
+</div>
+<div class="notes-editor app-modal-backdrop hidden" id="notesEditor">
+<div class="notes-editor-card app-modal-card glass-panel" id="notesEditorCard">
+<div class="notes-editor-draft-notice hidden" id="notesEditorDraftNotice"><span>Restored an unsaved draft.</span><button type="button" id="notesEditorDraftDiscard">Discard, start blank</button></div>
+<div class="notes-editor-fields">
+<input type="text" id="notesEditorName" class="notes-editor-input" placeholder="Note name">
+<input type="hidden" id="notesEditorGroup" value="">
+<button type="button" class="notes-editor-input notes-field-picker" id="notesEditorGroupBtn"><span class="notes-field-picker-label placeholder" id="notesEditorGroupLabel">No group selected</span><i class="icon icon-arrow-down notes-field-picker-caret"></i></button>
+<div class="notes-tags-field-row">
+<input type="hidden" id="notesEditorTags" value="">
+<button type="button" class="notes-editor-input notes-field-picker" id="notesEditorTagsBtn"><span class="notes-field-picker-label placeholder" id="notesEditorTagsLabel">No tags selected</span><i class="icon icon-arrow-down notes-field-picker-caret"></i></button>
+<button type="button" class="notes-tag-suggest-btn" id="notesTagSuggestBtn" title="Suggest tags with AI"><i class="icon icon-star-filled"></i></button>
+</div>
+<button type="button" class="notes-tag-suggest-btn" id="notesOutlineBtn" title="Outline (headings)"><i class="icon icon-list"></i></button>
+<button type="button" class="notes-tag-suggest-btn" id="notesMaxBtn" title="Maximize editor"><i class="icon icon-maximize"></i></button>
+<div class="notes-tag-suggestions hidden" id="notesTagSuggestions"></div>
+</div>
+<div class="notes-suggest-row hidden" id="notesSuggestRow"></div>
+<div class="notes-toolbar" id="notesToolbar"></div>
+<input type="file" id="notesAttachmentFileInput" class="hidden" multiple>
+<datalist id="notesFontSizePresets"><option value="8"></option><option value="9"></option><option value="10"></option><option value="11"></option><option value="12"></option><option value="13"></option><option value="14"></option><option value="16"></option><option value="18"></option><option value="20"></option><option value="24"></option><option value="28"></option><option value="32"></option><option value="36"></option><option value="48"></option><option value="72"></option></datalist>
+<div class="notes-editor-main">
+<aside class="notes-outline hidden" id="notesOutline"></aside>
+<div class="notes-editor-body-wrap" id="notesEdWrap">
+<div class="notes-editor-body" id="notesEditorBody" contenteditable="true"></div>
+<div class="notes-ed-overlay" id="notesEdOverlay"></div>
+</div>
+</div>
+<div class="notes-editor-actions">
+<span class="notes-editor-count" id="notesEditorCount"></span>
+<span class="notes-editor-error hidden" id="notesEditorError"></span>
+<button class="notes-editor-cancel" id="notesEditorCancel">Cancel</button>
+<button class="notes-editor-draft" id="notesEditorSaveTemplate">Save as Template</button>
+<button class="notes-editor-draft" id="notesEditorSaveDraft">Save as Draft</button>
+<button class="notes-editor-save" id="notesEditorSave"><i class="icon icon-save"></i><span>Save</span></button>
+</div>
+</div>
+</div>
+</section>
+</div>

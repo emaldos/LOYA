@@ -1,0 +1,48 @@
+.snip-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.snip-search{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);flex:1;max-width:320px}
+.snip-search .icon{width:14px;height:14px;color:var(--text-dim)}
+.snip-search input{flex:1;border:none;background:transparent;color:var(--text);font-size:12px;outline:none;-webkit-user-select:text;user-select:text}
+.snip-sort-wrap{position:relative}
+.snip-sort-btn{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:600}
+.snip-sort-btn:hover{color:var(--text)}
+.snip-sort-btn .icon{width:11px;height:11px}
+.snip-sort-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:150px;padding:6px;display:flex;flex-direction:column;gap:2px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);backdrop-filter:blur(var(--glass-blur))}
+.snip-sort-menu button{padding:8px 10px;border-radius:8px;background:transparent;border:none;color:var(--text);cursor:pointer;font-size:12px;text-align:left}
+.snip-sort-menu button:hover{background:var(--glass-bg)}
+.snip-sort-menu button.active{color:var(--accent-a);font-weight:700}
+.snip-fav-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:600;margin-left:auto}
+.snip-fav-btn:hover{color:var(--text)}
+.snip-fav-btn.active{color:var(--accent-a);border-color:var(--accent-a);background:var(--accent-a-soft)}
+.snip-fav-btn .icon{width:14px;height:14px}
+/* Fixed height so the glass card does not resize as rows load (see commands.css). */
+.snip-table-wrap{padding:6px;overflow:auto;height:calc(100% - 90px)}
+.snip-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.snip-table th{position:sticky;top:0;background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}
+.snip-table th:first-child{border-top-left-radius:12px}
+.snip-table th:last-child{border-top-right-radius:12px}
+.snip-col-fav{width:36px}
+.snip-row{cursor:pointer;transition:background 150ms ease}
+.snip-row:hover{background:var(--glass-bg)}
+.snip-row td{padding:9px 12px;border-top:1px solid var(--glass-border);color:var(--text);vertical-align:middle}
+/* Row content is centred vertically; the action buttons stay right-aligned in the last column. */
+.snip-row td:last-child{text-align:right;white-space:nowrap}
+.snip-fav-cell{display:flex;align-items:center;justify-content:center}
+.snip-fav-toggle{width:22px;height:22px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:6px}
+.snip-fav-toggle:hover{background:var(--glass-bg)}
+.snip-fav-toggle.active{color:#f5c542}
+.snip-fav-toggle .icon{width:14px;height:14px}
+.snip-cell-command{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.snip-cell-meta{display:flex;flex-direction:column;gap:2px}
+.snip-cell-sub{font-size:10px;color:var(--text-dim)}
+.snip-empty-msg{padding:30px;text-align:center;color:var(--text-dim);font-size:12px}
+.snip-total{margin-top:8px;font-size:11px;color:var(--text-dim)}
+.snip-note-popover{position:fixed;z-index:70;width:280px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.snip-note-popover-title{font-size:12px;font-weight:700;color:var(--text)}
+.snip-note-popover-list{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow:auto}
+.snip-note-popover-item{padding:8px 10px;border-radius:8px;background:transparent;border:none;color:var(--text);cursor:pointer;font-size:12px;text-align:left}
+.snip-note-popover-item:hover{background:var(--glass-bg)}
+.snip-col-run{width:44px}
+.snip-run-cell{text-align:center}
+.snip-run-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--glass-border);border-radius:7px;background:transparent;color:var(--text-dim);cursor:pointer}
+.snip-run-btn:hover{color:var(--accent-a);border-color:var(--accent-a);background:var(--glass-bg)}
+.snip-run-btn .icon{width:13px;height:13px}

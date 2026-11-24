@@ -1,0 +1,126 @@
+/* Chains page "Run History" sub-tab (UI/js/pages/chains_history.js) and the sub-tab switch / bundle buttons in the Chains toolbar.
+   Linked before glass.css, which must stay last. Colours come from the theme tokens only, so every theme (dark, light, royal) works. */
+:root{--chh-ok:var(--pal-success);--chh-warn:color-mix(in srgb,var(--pal-warn-border) 88%,var(--text))}
+[data-theme="light"]{--chh-warn:color-mix(in srgb,var(--pal-warn-border) 45%,var(--text))}
+/* ---- the switch and which toolbar items show on which tab */
+.chh-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg);flex:0 0 auto}
+.chh-switch-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;white-space:nowrap}
+.chh-switch-btn .icon{width:13px;height:13px}
+.chh-switch-btn:hover{color:var(--text)}
+.chh-switch-btn.active{color:var(--text);background:var(--accent-a-soft);border-color:var(--accent-a)}
+.chh-switch-btn:focus-visible{outline:none;border-color:var(--accent-a)}
+.page[data-page="chains"]:not(.chh-history-on) .chh-history-only{display:none}
+.page[data-page="chains"].chh-history-on .chains-toolbar>:not(.chh-switch):not(.chh-history-only){display:none}
+.page[data-page="chains"].chh-history-on #cmdsPlaybooksWrap{display:none}
+/* The diagram editor always wins: chains.js switches back to the Chains tab when it opens. */
+.chains-flow-host:not(.hidden)~.chh-host{display:none}
+.chains-toolbar .chh-history-only.chains-count{margin-right:auto}
+.chains-tool-btn:disabled{opacity:.45;cursor:default}
+.chains-tool-btn:disabled:hover{border-color:var(--glass-border)}
+.chh-danger-btn:not(:disabled):hover,.chh-danger-btn:not(:disabled):focus-visible{border-color:var(--danger);color:var(--danger)}
+/* ---- the panel: a fixed height like the chains list (WebKitGTK repaints resized backdrop-filter layers badly) */
+.chh-host{height:calc(100% - 56px);box-sizing:border-box;padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.chh-host.hidden{display:none}
+.chh-list-view,.chh-detail-view{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+.chh-detail-view{overflow:auto}
+.chh-list-view.hidden,.chh-detail-view.hidden{display:none}
+.chh-filters{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.chh-filters select.chh-select,.chh-filters .ui-select-trigger.chh-select{min-width:130px;max-width:240px}
+.chh-filters .ui-select-trigger{box-sizing:border-box;height:32px;padding:0 10px;border-radius:8px;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text);font-size:12px;font-weight:600}
+.chh-filters .ui-select-trigger:hover,.chh-filters .ui-select-trigger:focus-visible,.chh-filters .ui-select-trigger.open{border-color:var(--accent-a);outline:none}
+.chh-custom{display:inline-flex;align-items:center;gap:6px}
+.chh-custom.hidden{display:none}
+.chh-date{padding:6px 8px;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text);font-family:inherit;font-size:12px}
+.chh-date:focus{outline:none;border-color:var(--accent-a)}
+.chh-dash{font-size:12px;color:var(--text-dim)}
+.chh-sel-info{margin-left:auto;font-size:12px;color:var(--text-dim)}
+.chh-link-btn{border:none;background:transparent;color:var(--accent-a);cursor:pointer;font-size:12px;font-family:inherit;padding:4px 6px;border-radius:6px}
+.chh-link-btn:hover:not(:disabled){text-decoration:underline}
+.chh-link-btn:disabled{color:var(--text-dim);opacity:.5;cursor:default}
+.chh-link-btn.hidden{display:none}
+/* ---- the table (div grid, so it scrolls in one piece and columns drop out when the room is narrow) */
+.chh-table{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;border:1px solid var(--glass-border);border-radius:10px;overflow:hidden;container-type:inline-size;container-name:chh-table}
+.chh-body{overflow:auto;flex:1 1 auto;min-height:0}
+.chh-row{display:grid;grid-template-columns:34px minmax(140px,1.6fr) 150px 86px 104px minmax(110px,1fr) 104px minmax(90px,.9fr);align-items:center;gap:0 10px;padding:0 10px;min-height:38px;font-size:12.5px;color:var(--text);border-bottom:1px solid var(--glass-border)}
+.chh-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chh-head{min-height:32px;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;background:var(--glass-bg)}
+.chh-run-row{cursor:pointer}
+.chh-run-row:hover{background:var(--accent-a-soft)}
+.chh-run-row:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent-a)}
+.chh-run-row.selected{background:color-mix(in srgb,var(--accent-a-soft) 70%,transparent)}
+.chh-run-row:last-child{border-bottom:none}
+.chh-c-check{display:flex;align-items:center}
+.chh-c-chain{display:flex;align-items:center;gap:6px}
+.chh-chain-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.chh-c-time,.chh-c-dur{font-variant-numeric:tabular-nums;color:var(--text-dim)}
+.chh-c-nodes,.chh-c-trigger,.chh-c-target{color:var(--text-dim)}
+.chh-check{width:15px;height:15px;margin:0;cursor:pointer}
+@container chh-table (max-width:900px){.chh-row{grid-template-columns:34px minmax(130px,1.6fr) 140px 80px 100px minmax(100px,1fr)}.chh-c-trigger,.chh-c-target{display:none}}
+@container chh-table (max-width:640px){.chh-row{grid-template-columns:30px minmax(110px,1fr) 120px 96px}.chh-row>:nth-child(4),.chh-row>:nth-child(6){display:none}}
+.chh-empty{padding:28px 12px;text-align:center;font-size:12.5px;color:var(--text-dim)}
+.chh-pager{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:8px;font-size:12px;color:var(--text-dim)}
+.chh-pager.hidden{display:none}
+/* ---- pills, tags, text colours */
+.chh-pill{display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--glass-border);font-size:11px;line-height:1.55;font-weight:700;color:var(--text-dim);white-space:nowrap}
+.chh-pill.chh-ok{border-color:var(--chh-ok);color:var(--chh-ok)}
+.chh-pill.chh-bad{border-color:var(--danger);color:var(--danger)}
+.chh-pill.chh-warn{border-color:var(--pal-warn-border);color:var(--chh-warn)}
+.chh-pill.chh-live{border-color:var(--accent-a);color:var(--accent-a)}
+.chh-pill.chh-muted{border-style:dashed}
+.chh-tag{flex:0 0 auto;padding:0 6px;border-radius:6px;border:1px solid var(--glass-border);font-size:10.5px;line-height:1.6;color:var(--text-dim);font-weight:600}
+.chh-tag-muted{border-style:dashed}
+.chh-bad-text{color:var(--danger)}
+.chh-warn-text{color:var(--chh-warn)}
+.chh-dim{color:var(--text-dim);font-weight:400}
+/* ---- the run view */
+.chh-detail-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.chh-detail-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text);min-width:0;max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chh-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chh-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:14px}
+.chh-fact{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:9px;border:1px solid var(--glass-border);background:var(--glass-bg);min-width:0}
+.chh-fact-wide{grid-column:1/-1}
+.chh-fact-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim)}
+.chh-fact-value{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
+.chh-fact-value code{font-family:var(--font-mono);font-size:11.5px}
+.chh-section-title{font-size:12px;font-weight:700;color:var(--text);margin:4px 0 8px}
+.chh-gantt{display:flex;flex-direction:column;gap:4px;margin-bottom:14px;padding:8px 10px;border-radius:9px;border:1px solid var(--glass-border)}
+.chh-gantt-row{display:grid;grid-template-columns:minmax(90px,180px) 1fr;align-items:center;gap:10px;font-size:11.5px}
+.chh-gantt-label{color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chh-gantt-track{position:relative;height:10px;border-radius:5px;background:var(--glass-bg)}
+.chh-gantt-bar{position:absolute;top:0;bottom:0;border-radius:5px;background:var(--text-dim);min-width:3px}
+.chh-gantt-bar.chh-ok{background:var(--chh-ok)}
+.chh-gantt-bar.chh-bad{background:var(--danger)}
+.chh-gantt-bar.chh-live{background:var(--accent-a)}
+.chh-gantt-bar.chh-muted{background:var(--glass-border)}
+.chh-nodes{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}
+.chh-node{border:1px solid var(--glass-border);border-radius:9px;background:var(--glass-bg);border-left-width:3px}
+.chh-node-ok{border-left-color:var(--chh-ok)}
+.chh-node-bad{border-left-color:var(--danger)}
+.chh-node-live{border-left-color:var(--accent-a)}
+.chh-node summary{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;list-style:none;font-size:12.5px;color:var(--text)}
+.chh-node summary::-webkit-details-marker{display:none}
+.chh-node summary:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--accent-a);border-radius:8px}
+.chh-node-title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chh-node-meta{color:var(--text-dim);font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chh-node-time{margin-left:auto;color:var(--text-dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+.chh-node-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+.chh-node-error{color:var(--danger);overflow-wrap:anywhere}
+.chh-out-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim)}
+.chh-pre{margin:0;max-height:240px;overflow:auto;padding:8px 10px;border-radius:8px;border:1px solid var(--glass-border);background:var(--pal-code-bg);color:var(--text);font-family:var(--font-mono);font-size:11.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.chh-pre-err{border-color:color-mix(in srgb,var(--danger) 45%,var(--glass-border))}
+/* ---- dialogs (inside appConfirm's .confirm-body) */
+.chh-preview{display:flex;flex-direction:column;gap:8px}
+.chh-preview-file{font-family:var(--font-mono);font-size:11.5px;color:var(--text);overflow-wrap:anywhere}
+.chh-preview-counts{display:flex;gap:14px;font-weight:700;color:var(--text)}
+.chh-preview-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px;color:var(--text)}
+.chh-preview-opt{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--glass-border)}
+.chh-preview-opt label,.chh-pick-head label{display:flex;align-items:center;gap:8px;color:var(--text);cursor:pointer}
+.chh-preview-q{font-weight:600;color:var(--text)}
+.chh-note{font-size:12px;color:var(--text-dim)}
+.chh-problems ul{margin:4px 0 0;padding-left:18px;color:var(--danger)}
+.chh-pick-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chh-pick-count{font-size:11.5px;color:var(--text-dim)}
+.chh-pick-list{display:flex;flex-direction:column;gap:2px;max-height:30vh;overflow:auto;padding:4px;border-radius:8px;border:1px solid var(--glass-border)}
+.chh-pick-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;cursor:pointer;color:var(--text)}
+.chh-pick-row:hover{background:var(--accent-a-soft)}
+.chh-pick-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

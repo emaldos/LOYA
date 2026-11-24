@@ -1,0 +1,53 @@
+<div class="rpg-root" id="rpgRoot">
+<div class="rpg-list-view" id="rpgListView">
+<div class="rpg-toolbar">
+<div class="rpg-create" role="group" aria-label="Create">
+<button type="button" class="rpg-btn rpg-btn-primary" data-act="new"><i class="icon icon-add"></i><span>New report</span></button>
+<button type="button" class="rpg-btn rpg-btn-primary rpg-create-more" data-act="create-menu" aria-haspopup="menu" title="More ways to start: auto-generate from sessions, import"><i class="icon icon-arrow-down"></i></button>
+</div>
+<div class="rpg-filterbar" role="search">
+<div class="rpg-search"><i class="icon icon-search"></i><input type="text" id="rpgSearch" dir="auto" placeholder="Search reports..." autocomplete="off" spellcheck="false" aria-label="Search reports"></div>
+<select id="rpgStatusFilter" class="rpg-select" title="Filter by status"><option value="">All statuses</option><option value="draft">Draft</option><option value="review">In review</option><option value="final">Final</option></select>
+<select id="rpgSort" class="rpg-select" title="Sort"><option value="updated">Recently updated</option><option value="created">Recently created</option><option value="title">Title</option><option value="client">Client</option><option value="risk">Highest risk</option></select>
+<span class="rpg-list-count" id="rpgListCount"></span>
+</div>
+<div class="rpg-libgroup" role="group" aria-label="Library">
+<button type="button" class="rpg-btn" data-act="library" title="Reusable findings"><i class="icon icon-list"></i><span>Findings</span></button>
+<button type="button" class="rpg-btn" data-act="evidence" title="Captured command output, recordings and screenshots"><i class="icon icon-image"></i><span>Evidence</span></button>
+<button type="button" class="rpg-btn" data-act="templates" title="Report templates"><i class="icon icon-file"></i><span>Templates</span></button>
+</div>
+</div>
+<div class="rpg-list" id="rpgList" aria-label="Reports"></div>
+</div>
+<div class="rpg-editor hidden" id="rpgEditor">
+<div class="rpg-head glass-panel">
+<button type="button" class="rpg-icon-btn" id="rpgBackBtn" title="Back to the reports"><i class="icon icon-arrow-left"></i></button>
+<label class="rpg-title-wrap" title="Click to rename the report"><input type="text" class="rpg-title-input" id="rpgTitle" dir="auto" maxlength="300" placeholder="Report title" spellcheck="false" aria-label="Report title"><i class="icon icon-marker rpg-title-pencil" aria-hidden="true"></i></label>
+<select id="rpgStatus" class="rpg-select rpg-status-select" title="Report status"><option value="draft">Draft</option><option value="review">In review</option><option value="final">Final</option></select>
+<button type="button" class="rpg-risk" id="rpgRisk"></button>
+<button type="button" class="rpg-deadline-btn hidden" id="rpgDeadline"></button>
+<button type="button" class="rpg-save-state saved" id="rpgSaveState"><i></i><span>Saved</span></button>
+<div class="rpg-head-actions">
+<div class="rpg-undo" role="group" aria-label="Undo and redo">
+<button type="button" class="rpg-icon-btn" id="rpgUndoBtn" title="Nothing to undo (Ctrl+Z)" aria-label="Undo" disabled><i class="icon rpg-ic-undo"></i></button>
+<button type="button" class="rpg-icon-btn" id="rpgRedoBtn" title="Nothing to redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><i class="icon rpg-ic-redo"></i></button>
+</div>
+<button type="button" class="rpg-btn" id="rpgPreviewBtn" title="Preview the report (Ctrl+Shift+P)"><i class="icon rpg-ic-eye"></i><span>Preview</span></button>
+<button type="button" class="rpg-btn" id="rpgExportBtn" title="Export the report"><i class="icon rpg-ic-export"></i><span>Export</span></button>
+<button type="button" class="rpg-btn" id="rpgVersionsBtn" title="Saved versions of this report"><i class="icon icon-clock"></i><span>Versions</span></button>
+<button type="button" class="rpg-btn" id="rpgTplSaveBtn" title="Save this report's structure as a template"><i class="icon icon-save"></i><span>Save as template</span></button>
+<button type="button" class="rpg-icon-btn" id="rpgMoreBtn" title="More"><i class="icon icon-dots-vertical"></i></button>
+</div>
+</div>
+<div class="rpg-body">
+<aside class="rpg-outline glass-panel">
+<div class="rpg-outline-fixed" id="rpgOutlineFixed"></div>
+<div class="rpg-outline-label">Sections</div>
+<div class="rpg-outline-list" id="rpgOutlineList"></div>
+<div class="rpg-quick-row" id="rpgQuickAdd" role="group" aria-label="Quick add a section"></div>
+<button type="button" class="rpg-outline-add" id="rpgAddSection" title="Choose a section to add (Alt+A)" aria-haspopup="dialog"><i class="icon icon-add"></i><span>Add section</span></button>
+</aside>
+<section class="rpg-main-wrap glass-panel"><div class="rpg-main" id="rpgMain"></div></section>
+</div>
+</div>
+</div>

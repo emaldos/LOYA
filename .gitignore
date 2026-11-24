@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+# Virtual environments
+.venv/
+.venv_windows/
+.venv_linux/
+venv/
+env/
+# Local app runtime data
+UI/js/appearance-boot.js
+Data/
+Logs/
+Backups/
+Cores/Update/OldVersions/
+Cores/Update/state.json
+# Retired local modules
+Cores/LOYA_Chat/
+# Temporary files
+*.log
+*.tmp
+*.bak
+*.orig
+# Test/cache/tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+# IDE / OS
+.idea/
+.vs/
+.vscode/
+Thumbs.db
+Desktop.ini
+.DS_Store
+# Personal / local-only files not part of the project
+Nmap Cheatsheet.md
+# macOS extended attributes
+*.AppleDouble
+*.LSOverride
+# Windows image file caches
+ehthumbs.db
+# Packaging artifacts
+*.egg-info/
+*.egg
+MANIFEST
+# Distribution / packaging
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+# Claude Code machine-local settings (personal permissions) and secret files - never commit
+.claude/settings.local.json
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+id_rsa*
+.claude/*.lock
+# Offline CVE index: built by tools/build_cve_index.py and added to the release zip, never committed (tens of MB per refresh)
+Assets/cve/cve-index.sqlite.xz
+Assets/cve/cve-index.json
+cve-index-*.sqlite.xz
+cve-index-*.sqlite.xz.sha256
+# Encrypted backups and credential helpers - never commit, wherever they end up
+*.loyabak
+.git-credentials
+.netrc

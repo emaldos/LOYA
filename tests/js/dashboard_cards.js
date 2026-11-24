@@ -1,0 +1,91 @@
+// Dashboard card renderers (UI/js/components/card.js): escaping of user text, empty/loading/error states, KPI fallback.
+const fs=require("fs")
+const path=require("path")
+const vm=require("vm")
+const ROOT=path.resolve(__dirname,"..","..")
+const ctx={console}
+vm.createContext(ctx)
+vm.runInContext(fs.readFileSync(path.join(ROOT,"UI","js","components","card.js"),"utf8"),ctx)
+let passed=0,failed=0
+function check(name,cond,detail){if(cond){passed++;return}failed++;console.log("  FAIL  "+name+(detail?"  ->  "+detail:""))}
+const EVIL='<img src=x onerror="alert(1)">'
+function clean(name,html){
+check(name+": no raw tag",html.indexOf("<img")===-1&&html.indexOf("<script")===-1,html.slice(0,200))
+check(name+": text kept escaped",html.indexOf("&lt;img")!==-1||html.indexOf("&lt;script")!==-1,html.slice(0,200))
+}
+const r=(widget,stats)=>vm.runInContext("renderCardBody",ctx)(widget,stats)
+check("dashEsc escapes all five",ctx.dashEsc(`<a href="x" title='y'>&</a>`)==="&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;")
+check("dashEsc handles null/number",ctx.dashEsc(null)===""&&ctx.dashEsc(0)==="0")
+clean("feed",r("recent_activity",{activity_feed:[{kind:"note",action:"edited",title:EVIL,relative:"1m ago",ref_id:1,ref_src:""}]}))
+clean("jobs",r("recent_jobs",{recent_jobs:{running:0,items:[{command:EVIL,state:"failed",exit_code:2,relative:"",duration_s:61}]}}))
+clean("commands",r("most_used_commands",{most_used_commands:[{id:1,src:"CommandsNotes",title:EVIL,command:"x",resolved:"<script>x</script>",runs:2}]}))
+clean("notes",r("recent_notes",{recent_notes:[{id:1,name:EVIL,group:"g",relative:""}]}))
+clean("live target",r("live_target",{live_target:{profile:EVIL,targets:[{id:"t",name:EVIL,live:true}],target:{id:"t",name:EVIL,engagement_status:"in_progress",engagement_label:"In Progress",values:[{key:"IPv4",value:EVIL}],value_count:1}}}))
+clean("missing",r("missing_placeholders",{missing_placeholders:{live:true,live_name:EVIL,used_keys:2,missing_count:1,missing:[{key:"<script>",commands:1,notes:0}]}}))
+clean("wheel legend",r("notes_by_group",{notes_by_group:{[EVIL]:2}}))
+clean("legacy stat",r("active_engagement",{active_engagement:{name:EVIL,targets_count:1}}))
+clean("legacy activity list",r("recent_activity",{recent_activity:[{label:EVIL,relative:"now"}]}))
+check("jobs empty state",r("recent_jobs",{recent_jobs:{items:[]}}).indexOf("No jobs yet - run a command from Commands or Quick Run.")!==-1)
+check("feed empty state",r("recent_activity",{activity_feed:[]}).indexOf("No activity yet")!==-1)
+check("favourites empty state",r("favorite_snippets",{favorite_snippets:[]}).indexOf("Quick Run")!==-1)
+check("live no targets",r("live_target",{live_target:{targets:[],target:null}}).indexOf("No targets yet")!==-1)
+check("live no live target keeps switch",/No live target/.test(r("live_target",{live_target:{targets:[{id:"a",name:"A",live:false}],target:null}}))&&/data-act="live-pick"/.test(r("live_target",{live_target:{targets:[{id:"a",name:"A",live:false}],target:null}})))
+check("missing all filled",r("missing_placeholders",{missing_placeholders:{live:true,live_name:"L",used_keys:3,missing_count:0,missing:[]}}).indexOf("All 3 elements are filled")!==-1)
+check("engagements empty",r("engagements",{engagements:{total:0,statuses:[]}}).indexOf("No targets yet")!==-1)
+check("loading state",r("notes_count",null).indexOf("dash-loading")!==-1)
+check("global error has retry",/data-act="retry"/.test(r("notes_count",{__error:true})))
+check("per-card error",r("recent_jobs",{errors:["recent_jobs"],recent_jobs:{items:[]}}).indexOf("load this card")!==-1)
+check("other cards unaffected by per-card error",r("engagements",{errors:["recent_jobs"],engagements:{total:0}}).indexOf("load this card")===-1)
+const kpi=r("notes_count",{kpi:{notes:{value:7,week:3,series:[0,1,2,0,4]}}})
+check("kpi value and delta",kpi.indexOf(">7<")!==-1&&kpi.indexOf("+3 new this week")!==-1&&kpi.indexOf("dash-spark")!==-1)
+const legacy=r("notes_count",{notes_count:4})
+check("kpi falls back to legacy counts without a kpi block",legacy.indexOf(">4<")!==-1&&legacy.indexOf("new this week")===-1,legacy)
+check("kpi jobs failed today",r("terminal_jobs",{kpi:{jobs:{value:1,week:2,series:[],failed_day:2}}}).indexOf("2 failed today")!==-1)
+check("sparkline needs two points",ctx.renderSparkline([3])===""&&ctx.renderSparkline([0,0]).indexOf("polyline")!==-1)
+check("duration format",ctx.dashFmtDuration(59)==="59s"&&ctx.dashFmtDuration(61)==="1m 1s"&&ctx.dashFmtDuration(3700)==="1h 1m"&&ctx.dashFmtDuration(null)==="")
+check("heat levels",ctx.dashHeatLevel(0,10)===0&&ctx.dashHeatLevel(10,10)===4&&ctx.dashHeatLevel(2,3)===2)
+check("deleted feed item not clickable",r("recent_activity",{activity_feed:[{kind:"note",action:"deleted",deleted:true,title:"x",relative:""}]}).indexOf("feed-open")===-1)
+{
+const R={reports:3,by_status:{draft:1,review:1,final:1},findings:{critical:2,high:1,medium:0,low:0,info:4},open_by_severity:{critical:1,high:1,medium:0,low:0,info:0},open_findings:2,recent:[{id:7,title:EVIL,status:"review",updated_at:""},{id:8,title:"B",status:"draft"},{id:9,title:"C",status:"final"},{id:10,title:"D",status:"draft"}],next_deadline:{report_id:7,title:EVIL,label:EVIL,date:"2026-11-20",days_left:-3,overdue:true},overdue:2}
+const h=r("reports",{reports:R})
+clean("reports",h)
+check("reports: counts by status",/<strong>1<\/strong> Draft/.test(h)&&/<strong>1<\/strong> In review/.test(h)&&/<strong>1<\/strong> Final/.test(h),h)
+check("reports: open severity pills, zero ones hidden",/sev-critical[^>]*>1 Critical/.test(h)&&/sev-high[^>]*>1 High/.test(h)&&h.indexOf("sev-medium")===-1&&h.indexOf("sev-info")===-1,h)
+check("reports: open findings total",h.indexOf("2 open findings")!==-1)
+check("reports: overdue deadline is flagged",/dash-rep-deadline overdue/.test(h)&&h.indexOf("3 days overdue")!==-1,h)
+check("reports: at most three recent, each opens its report",(h.match(/class="dash-row-main" data-act="report-open"/g)||[]).length===3&&/data-act="report-open" data-id="7"/.test(h))
+check("reports: new report action",/data-act="report-new"/.test(h))
+const soon=r("reports",{reports:Object.assign({},R,{overdue:0,next_deadline:{report_id:8,title:"B",label:"Draft due",date:"2026-11-24",days_left:1,overdue:false}})})
+check("reports: upcoming deadline is not red",soon.indexOf("dash-rep-deadline overdue")===-1&&soon.indexOf("Draft due - B - 2026-11-24 (tomorrow)")!==-1,soon)
+check("reports: no deadline line",r("reports",{reports:Object.assign({},R,{next_deadline:null,overdue:0})}).indexOf("No upcoming deadline")!==-1)
+check("reports: falls back to all findings without the open split",/sev-info[^>]*>4 Info/.test(r("reports",{reports:Object.assign({},R,{open_by_severity:undefined})})))
+const none=r("reports",{reports:{reports:0}})
+check("reports: empty state offers a new report",none.indexOf("No reports yet")!==-1&&/data-act="report-new"/.test(none))
+check("reports: per-card error",r("reports",{errors:["reports"],reports:{reports:0}}).indexOf("load this card")!==-1)
+check("reports: overdue badge in the head",ctx.dashCardBadge("reports",{reports:R}).indexOf("2 overdue")!==-1&&ctx.dashCardBadge("reports",{reports:{overdue:0}})==="")
+}
+const head=ctx.renderCardHtml({id:"c<1>",widget:"unknown<w>",size:"1x1"},{catalog:{widgets:[]},stats:{},editMode:true})
+check("card head escapes id and unknown widget",head.indexOf("c<1>")===-1&&head.indexOf("unknown<w>")===-1)
+check("edit mode makes body inert",/data-kind="stat" inert/.test(head))
+console.log("")
+// Live target picker search (dashFilterTargets): name, hint and searchable values; all words must match; live first.
+{
+const L=[{id:"1",name:"web01.acme",hint:"10.10.20.15 · acme.example",search:"10.10.20.15 acme.example 443",live:false},{id:"2",name:"dc01.globex",hint:"172.16.5.10",search:"172.16.5.10 globex.local",live:true},{id:"3",name:"mail01.acme",hint:"10.10.20.25",search:"10.10.20.25",live:false}]
+const f=(q)=>ctx.dashFilterTargets(L,q).map((t)=>t.id).join(",")
+check("picker: empty query lists all, live first",f("")==="2,3,1",f(""))
+check("picker: search by name",f("acme")==="3,1",f("acme"))
+check("picker: search by IP",f("172.16")==="2",f("172.16"))
+check("picker: search by a value not in the hint",f("443")==="1",f("443"))
+check("picker: all words must match",f("acme 20.25")==="3",f("acme 20.25"))
+check("picker: case-insensitive",f("WEB01")==="1",f("WEB01"))
+check("picker: no match is empty",f("zzz")==="",f("zzz"))
+check("picker: the live target name is escaped in the button",!/<img/.test(r("live_target",{live_target:{targets:[{id:"t",name:EVIL,live:true}],target:{id:"t",name:EVIL,engagement_status:"x",engagement_label:"X",values:[]}}})))
+}
+// GTK leaves the native tooltip over the open picker: its title is held while open and restored by closeDashPopover.
+{
+const dsrc=fs.readFileSync(path.join(ROOT,"UI","js","pages","dashboard.js"),"utf8")
+check("picker: the trigger title is held while the picker is open",/function dashOpenLivePicker\(anchorEl\)\{\ncloseDashPopover\(\)\n[^\n]*\nif\(anchorEl\.title\)\{anchorEl\.dataset\.heldTitle=anchorEl\.title;anchorEl\.removeAttribute\("title"\)\}/.test(dsrc))
+check("picker: closing a dashboard popover restores a held title",/function closeDashPopover\(\)\{[\s\S]*?held\.title=held\.dataset\.heldTitle[\s\S]*?\n\}/.test(dsrc))
+}
+console.log(passed+" passed, "+failed+" failed")
+process.exit(failed?1:0)

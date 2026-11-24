@@ -1,0 +1,42 @@
+<div class="tgt-page">
+<div class="tgt-head">
+<div class="tgt-tabs" role="tablist" aria-label="Targets page views">
+<button type="button" class="tgt-tab active" data-tab="targets" role="tab"><i class="icon icon-target"></i><span>Targets</span></button>
+<button type="button" class="tgt-tab" data-tab="elements" role="tab"><i class="icon icon-list"></i><span>Set Elements</span></button>
+</div>
+<div class="tgt-toolbar tgt-panel active" data-tab-panel="targets">
+<button type="button" class="tgt-profile-btn" id="tgtProfileBtn" title="Switch, create or delete target profiles"><i class="icon icon-folder"></i><span class="tgt-profile-lbl">Profile</span><span class="tgt-profile-name" id="tgtProfileBtnLabel">Default</span><i class="icon icon-arrow-down tgt-caret"></i></button>
+<div class="tgt-search"><i class="icon icon-search"></i><input type="text" id="tgtSearchInput" placeholder="Search names and values..." autocomplete="off" spellcheck="false" aria-label="Search targets"><button type="button" class="tgt-search-clear hidden" data-clear="tgtSearchInput" title="Clear search"><i class="icon icon-close"></i></button></div>
+<span class="tgt-count" id="tgtCount"></span>
+<button type="button" class="tgt-new-btn" id="tgtNewBtn"><i class="icon icon-add"></i><span>Add Target</span></button>
+</div>
+<div class="tgt-toolbar tgt-panel" data-tab-panel="elements">
+<div class="tgt-search"><i class="icon icon-search"></i><input type="text" id="keyFilterInput" placeholder="Search elements..." autocomplete="off" spellcheck="false" aria-label="Search elements"><button type="button" class="tgt-search-clear hidden" data-clear="keyFilterInput" title="Clear search"><i class="icon icon-close"></i></button></div>
+<span class="tgt-count" id="keysCount"></span>
+<div class="tgt-chips" role="group" aria-label="Filters">
+<button type="button" class="tgt-chip" id="keyManualFilter" aria-pressed="false" title="Only elements added by hand">Manual only</button>
+<button type="button" class="tgt-chip" id="keyUnusedFilter" aria-pressed="false" title="Only elements no command uses (links = 0)">Unused</button>
+</div>
+<div class="tgt-actions">
+<button type="button" class="tgt-merge-btn tgt-tools-btn" id="keyToolsBtn" aria-haspopup="menu"><i class="icon icon-settings"></i><span>Tools</span><i class="icon icon-arrow-down tgt-caret"></i></button>
+<button type="button" class="tgt-new-btn" id="keyAddBtn"><i class="icon icon-add"></i><span>Add Element</span></button>
+</div>
+</div>
+</div>
+<div class="tgt-table-wrap glass-panel tgt-panel active" data-tab-panel="targets">
+<table class="tgt-table tgt-table-targets">
+<colgroup><col><col class="tgt-w-status"><col class="tgt-w-engagement"><col class="tgt-w-actions"></colgroup>
+<thead><tr><th>Target</th><th>Status</th><th>Engagement</th><th class="tgt-th-actions">Actions</th></tr></thead>
+<tbody id="tgtTableBody"></tbody>
+</table>
+<div class="tgt-empty hidden" id="tgtEmptyMsg"></div>
+</div>
+<div class="tgt-table-wrap glass-panel tgt-panel" data-tab-panel="elements">
+<table class="tgt-table tgt-table-keys">
+<colgroup><col><col class="tgt-w-priority"><col class="tgt-w-links"><col class="tgt-w-manual"><col class="tgt-w-actions"></colgroup>
+<thead><tr><th>Element</th><th title="Lower numbers are listed first in forms and pickers">Priority</th><th title="Commands that use this element">Links</th><th>Source</th><th class="tgt-th-actions">Actions</th></tr></thead>
+<tbody id="keysTableBody"></tbody>
+</table>
+<div class="tgt-empty hidden" id="keysEmptyMsg"></div>
+</div>
+</div>

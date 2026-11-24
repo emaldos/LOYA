@@ -1,0 +1,327 @@
+<div class="set-tabs">
+<button type="button" class="set-tab" data-tab="appearance">Appearance</button>
+<button type="button" class="set-tab active" data-tab="security">Security</button>
+<button type="button" class="set-tab" data-tab="backup">Backup</button>
+<button type="button" class="set-tab" data-tab="tags">Tags</button>
+<button type="button" class="set-tab" data-tab="recycle">Recycle Bin</button>
+<button type="button" class="set-tab" data-tab="importexport">Import &amp; Export</button>
+<button type="button" class="set-tab" data-tab="update">Update</button>
+<button type="button" class="set-tab" data-tab="extensions">Extensions</button>
+<button type="button" class="set-tab" data-tab="ai">AI</button>
+<button type="button" class="set-tab" data-tab="cve">CVE Intel</button>
+</div>
+<div class="set-panel" data-tab-panel="appearance">
+<div class="set-box glass-panel">
+<div class="set-box-title">Theme</div>
+<p class="set-info">Choose light, dark, Royal (gold and silver), or follow your OS setting.</p>
+<div class="set-row"><select id="setThemeModeSelect" class="set-select"><option value="dark">Dark</option><option value="light">Light</option><option value="royal">Royal</option><option value="system">Match System</option></select></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Style</div>
+<p class="set-info">Glass gives panels, the dock and buttons lit liquid-glass edges. Classic keeps the original flat-edged look. Works with every theme.</p>
+<div class="set-row"><select id="setStyleSelect" class="set-select"><option value="glass">Glass</option><option value="classic">Classic</option></select></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Accent Color</div>
+<p class="set-info">Pick the accent color pair used for highlights, buttons, and active states across the app.</p>
+<div class="set-accent-grid" id="setAccentGrid"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Focus Mode</div>
+<p class="set-info">While actively typing in the note editor, fade out the bottom nav and other floating chrome so it's less distracting. Restores on any mouse movement or Escape. Off by default.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setFocusModeToggle"><span>Enable Focus Mode</span></label></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Note Suggestions</div>
+<p class="set-info">While you write a note, offer a title and tags as clickable chips above the toolbar. They are worked out on this computer from the note text (tools, services, hosts, CVE ids, your Targets and existing tags) and nothing is ever applied until you click a chip. "Ask AI" on the chip row only appears when an AI provider is enabled. Both are off by default.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setNoteAutoPairs"><span>Auto-close brackets and quotes ( [ { &quot; &#39; ` while typing</span></label></div>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setNoteSuggestTitle"><span>Suggest a note title</span></label></div>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setNoteSuggestTags"><span>Suggest tags</span></label></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Onboarding Tour</div>
+<p class="set-info">Replay the first-run walkthrough of the Dashboard, Notes, Terminal, and AI Assistant.</p>
+<div class="set-row"><button type="button" class="set-btn" id="setReplayTourBtn">Replay Tour</button></div>
+</div>
+</div>
+<div class="set-panel active" data-tab-panel="security">
+<div class="set-box glass-panel">
+<div class="set-box-title">App Lock &amp; Encryption</div>
+<p class="set-info">Protect access and encrypt the database at rest.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setLockToggle"><span>Enable app lock on start</span></label><button type="button" class="set-btn" id="setPinBtn">Set / Change PIN</button></div>
+<div class="set-status" id="setPinStatus"></div>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setEncToggle"><span>Enable database encryption (at rest)</span></label></div>
+<div class="set-status" id="setEncStatus"></div>
+<div class="set-row"><span>Auto-lock after</span><select id="setAutoLockSelect" class="set-select"><option value="0">Never</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select><span>of inactivity</span></div>
+<div class="set-status" id="setSecStatus"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Security Audit Log</div>
+<p class="set-info">A read-only record of unlock attempts, PIN changes, and encryption/lock toggles. Not editable - this is an audit trail.</p>
+<div class="set-row set-audit-expiry"><label class="set-check"><input type="checkbox" id="setAuditExpiryToggle"><span>Expire old entries</span></label><span>older than</span><input type="text" id="setAuditExpiryAmount" class="set-input set-input-sm" inputmode="numeric" maxlength="3" value="90" aria-label="Expire after"><select id="setAuditExpiryUnit" class="set-select" aria-label="Expiry unit"><option value="days">Days</option><option value="months">Months</option><option value="years">Years</option></select><button type="button" class="set-btn" id="setAuditExpirySaveBtn">Save</button></div>
+<div class="set-status" id="setAuditExpiryStatus"></div>
+<div class="set-table-wrap"><table class="set-table"><thead><tr><th>When</th><th>Event</th><th>Detail</th><th>Result</th></tr></thead><tbody id="setAuditTableBody"></tbody></table></div>
+<div class="set-status" id="setAuditStatus"></div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="backup">
+<div class="set-box glass-panel">
+<div class="set-box-title">Backup</div>
+<p class="set-info">Backs up the Data folder. Select a backup then Restore, or Restore with nothing selected to pick a backup ZIP from disk.</p>
+<div class="set-row">
+<label class="set-check"><input type="checkbox" id="setBkAutoToggle"><span>Enable auto backup</span></label>
+<select id="setBkFreq" class="set-select"><option value="6">Every 6 hours</option><option value="24">Daily</option><option value="168">Weekly</option><option value="720">Monthly</option></select>
+<select id="setBkKeep" class="set-select"><option value="5">Keep 5</option><option value="10">Keep 10</option><option value="20">Keep 20</option><option value="50">Keep 50</option><option value="100">Keep 100</option></select>
+</div>
+<div class="set-row"><button type="button" class="set-btn primary" id="setBkCreateBtn">Backup Now</button><button type="button" class="set-btn" id="setBkRestoreBtn">Restore Selected</button><button type="button" class="set-btn danger" id="setBkDeleteBtn">Delete Selected</button></div>
+<div class="set-table-wrap"><table class="set-table"><thead><tr><th class="set-col-check"></th><th>Backup</th><th>Modified</th><th>Size</th><th></th></tr></thead><tbody id="setBkTableBody"></tbody></table></div>
+<div class="set-status" id="setBkStatus"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Off-machine Backup Copy</div>
+<p class="set-info">On every scheduled/auto backup, also copy the resulting ZIP to a second folder - a synced folder (OneDrive/Dropbox) or mounted network share works, no cloud account setup needed.</p>
+<div class="set-row"><input type="text" id="setBkOffsiteInput" class="set-input" placeholder="No folder set" readonly><button type="button" class="set-btn" id="setBkOffsiteBrowseBtn">Choose Folder...</button><button type="button" class="set-btn danger" id="setBkOffsiteClearBtn">Clear</button></div>
+<div class="set-status" id="setBkOffsiteStatus"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Native OS Notifications</div>
+<p class="set-info">Show a Windows/Linux notification for background events (like auto backups) in addition to the in-app toast. Falls back silently if unavailable - never blocks the app.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setNotifyOsToggle"><span>Enable OS notifications</span></label><button type="button" class="set-btn" id="setNotifyTestBtn">Send Test Notification</button></div>
+<div class="set-status" id="setNotifyStatus"></div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="tags">
+<div class="set-box glass-panel">
+<div class="set-box-title">Tag Manager</div>
+<p class="set-info">Rename, merge, or delete tags across Commands Notes and note tags. Select exactly one tag to rename, or two or more to merge.</p>
+<div class="set-row"><input type="text" id="setTagSearch" class="set-input" placeholder="Search tags..."><button type="button" class="set-btn" id="setTagRefreshBtn">Refresh</button></div>
+<div class="set-row set-row-tight"><label class="set-check"><input type="checkbox" id="setTagLinked" checked><span>Also update linked commands and command cards inside notes</span></label></div>
+<div class="set-row"><input type="text" id="setTagNew" class="set-input" placeholder="New name (for Rename / Merge)"><button type="button" class="set-btn primary" id="setTagRenameBtn">Rename</button><button type="button" class="set-btn" id="setTagMergeBtn">Merge</button><span class="set-row-divider"></span><button type="button" class="set-btn danger" id="setTagDeleteBtn">Delete</button></div>
+<div class="set-table-wrap"><table class="set-table"><thead><tr><th class="set-col-check"></th><th>Tag</th><th>Commands Notes</th><th>Linked</th><th>Notes</th><th>Total</th></tr></thead><tbody id="setTagTableBody"></tbody></table></div>
+<div class="set-status" id="setTagStatus"></div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="recycle">
+<div class="set-box glass-panel">
+<div class="set-box-title">Recycle Bin</div>
+<p class="set-info">Deleted notes, commands, and targets stay here for a limited time before they are purged automatically. A new retention period applies to items deleted from now on; items already in the bin keep their expiry date.</p>
+<div class="set-row"><span>Retention</span><input type="text" id="setRbRetentionInput" class="set-input set-input-sm" inputmode="numeric"><span>days</span><button type="button" class="set-btn" id="setRbRetentionSaveBtn">Save</button></div>
+<div class="set-status" id="setRbRetentionStatus"></div>
+<div class="set-row"><input type="text" id="setRbSearch" class="set-input" placeholder="Search recycle bin..."><select id="setRbType" class="set-select"><option value="">All</option><option value="note">Notes</option><option value="command">Commands</option><option value="target">Targets</option></select><button type="button" class="set-btn" id="setRbRefreshBtn">Refresh</button></div>
+<div class="set-row"><button type="button" class="set-btn primary" id="setRbRestoreBtn">Restore Selected</button><button type="button" class="set-btn danger" id="setRbDeleteBtn">Delete Permanently</button><button type="button" class="set-btn" id="setRbRestoreAllBtn">Restore All</button><button type="button" class="set-btn danger" id="setRbPurgeBtn">Purge Now</button></div>
+<div class="set-table-wrap"><table class="set-table"><thead><tr><th class="set-col-check"></th><th>Type</th><th>Label</th><th>Source</th><th>Deleted</th><th>Expires</th><th>Days Left</th></tr></thead><tbody id="setRbTableBody"></tbody></table></div>
+<div class="set-status" id="setRbStatus"></div>
+</div>
+</div>
+<div class="set-panel set-ie-panel" data-tab-panel="importexport">
+<div class="set-box glass-panel">
+<div class="set-ie-head">
+<div class="set-ie-head-text"><div class="set-box-title">Import &amp; Export</div><p class="set-info">Export your data to a file, or import a file you exported before. Notes and Commands imports let you resolve conflicts per item.</p></div>
+<button type="button" class="set-ie-action" id="setIeOpenExportBtn"><i class="icon icon-save"></i><span>Export Data...</span></button>
+</div>
+<div class="set-ie-drop" id="setIeDrop" role="button" tabindex="0" aria-label="Import a file: drop it here or press Enter to browse">
+<i class="icon icon-add set-ie-drop-icon"></i>
+<div class="set-ie-drop-text"><strong>Drop a file here to import</strong><span>or click to browse - JSON, CSV, ZIP, SQLite DB, CherryTree (.ctd)</span></div>
+<button type="button" class="set-ie-drop-alt" id="setIeOpenImportBtn" title="Pick the data type first, or import a Markdown folder">Choose type...</button>
+</div>
+<input type="file" id="setIeDropInput" class="hidden" accept=".json,.csv,.zip,.db,.sqlite,.ctd">
+<div class="set-status" id="setIeDropStatus"></div>
+</div>
+<div class="set-ie-grid">
+<div class="set-box glass-panel set-ie-card">
+<div class="set-box-title">Build Report</div>
+<p class="set-info">Quick export of selected notes as Markdown, HTML, PDF, or Word. For a full penetration-test report with findings, evidence and a cover page, use the Reporting tab.</p>
+<div class="set-ie-actions"><button type="button" class="set-ie-action" id="setIeOpenReportBtn"><i class="icon icon-file"></i><span>Build Report...</span></button><button type="button" class="set-ie-action" id="setIeOpenReportingBtn"><i class="icon icon-report"></i><span>Open Reporting</span></button></div>
+</div>
+<div class="set-box glass-panel set-ie-card">
+<div class="set-box-title">Report Statistics</div>
+<p class="set-info">Snapshot of notes, commands, targets and activity - JSON, HTML, PDF, or PNG.</p>
+<div class="set-ie-actions"><button type="button" class="set-ie-action" id="setIeOpenStatsBtn"><i class="icon icon-table"></i><span>Report Statistics...</span></button></div>
+</div>
+<div class="set-box glass-panel set-ie-card">
+<div class="set-box-title">Templates</div>
+<p class="set-info">Example files in the exact format LOYA imports - a reference for hand-editing, or to give an AI to reformat your data.</p>
+<div class="set-ie-actions"><button type="button" class="set-ie-action" id="setIeOpenTplBtn"><i class="icon icon-info"></i><span>Templates...</span></button><button type="button" class="set-ie-action" id="setIeOpenAiTplBtn"><i class="icon icon-command-line"></i><span>AI Prompts...</span></button></div>
+</div>
+<div class="set-box glass-panel set-ie-card">
+<div class="set-box-title">Reports</div>
+<p class="set-info">Back up or move your penetration-test reports, report templates and findings library. A report JSON file can also be dropped on the import area above.</p>
+<div class="set-ie-actions"><button type="button" class="set-ie-action" id="setIeRptExportAllBtn"><i class="icon icon-save"></i><span>Export All Reports...</span></button><button type="button" class="set-ie-action" id="setIeRptExportTplBtn"><i class="icon icon-file"></i><span>Export Templates...</span></button><button type="button" class="set-ie-action" id="setIeRptExportLibBtn"><i class="icon icon-list"></i><span>Export Findings Library...</span></button><button type="button" class="set-ie-action" id="setIeRptImportBtn"><i class="icon icon-add"></i><span>Import...</span></button></div>
+<div class="set-status" id="setIeRptStatus"></div>
+</div>
+</div>
+<div class="set-box glass-panel rpt-x-defaults-box">
+<div class="set-box-title">Report Export Defaults</div>
+<p class="set-info">Starting values for new reports and for the export dialog: format, page size, classification, branding and the assessment team.</p>
+<div id="setIeRptDefaults"></div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="update">
+<div class="set-box glass-panel">
+<div class="set-box-title">Update</div>
+<p class="set-info">Check the official LOYA repository, download releases whose SHA-256 matches the one GitHub publishes, back up, and apply updates without touching Data/. A failed start after an update is rolled back automatically.</p>
+<div class="set-row">
+<label class="set-check"><input type="checkbox" id="setUpAutoToggle"><span>Enable update checks</span></label>
+<select id="setUpFreq" class="set-select"><option value="24">Daily</option><option value="72">Every 3 days</option><option value="168">Weekly</option></select>
+<select id="setUpChannel" class="set-select"><option value="stable">stable</option></select>
+</div>
+<div class="set-row">
+<label class="set-label" for="setUpOnAvailable">When an update is available</label>
+<select id="setUpOnAvailable" class="set-select"><option value="ask">Ask me</option><option value="background">Download in the background and install on next restart</option><option value="notify">Only notify</option></select>
+</div>
+<div class="set-update-grid">
+<div class="set-update-row"><span class="set-update-label">About</span><span>LOYA - Language Of Your Attack</span></div>
+<div class="set-update-row"><span class="set-update-label">Current Version</span><span id="setUpCurVer">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Latest Available</span><span id="setUpLatestVer">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Last Checked</span><span id="setUpLastChecked">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Last Good Version</span><span id="setUpLastGood">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Authenticated Repo</span><span id="setUpRepo">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Manifest URL</span><span id="setUpManifest">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Update Status</span><span id="setUpStatusText">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Code Snapshots</span><span id="setUpSnapshots">-</span></div>
+<div class="set-update-row"><span class="set-update-label">Release Notes</span><span><a href="#" id="setUpReleaseLink" class="set-link">Open on GitHub</a></span></div>
+</div>
+<div class="set-row"><button type="button" class="set-btn primary" id="setUpCheckBtn">Check Now</button><button type="button" class="set-btn" id="setUpUpdateBtn" disabled>Update Now</button><button type="button" class="set-btn" id="setUpLogsBtn">Open Logs</button><button type="button" class="set-btn" id="setUpSnapsBtn">Open Snapshots</button><button type="button" class="set-btn primary hidden" id="setUpCloseNowBtn">Close App Now</button></div>
+<div class="set-status" id="setUpFooter"></div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="extensions">
+<div class="set-box glass-panel">
+<div class="set-box-title">Terminal</div>
+<p class="set-info">A resizable terminal panel docked to the right edge of the window, offering shell sessions (your login shell, PowerShell, or CMD on Windows) with optional elevation.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setTermToggle"><span>Enable Terminal extension</span></label></div>
+<div class="set-row hidden" id="setTermConptyRow"><label class="set-check"><input type="checkbox" id="setTermConpty"><span>Use a real Windows pseudoconsole (experimental)</span></label></div>
+<p class="set-info" id="setTermConptyInfo">Unlocks resizing and interactive full-screen tools. If a session fails to start this way it falls back to the current method automatically, so turning it on cannot break the terminal.</p>
+<div class="set-status" id="setTermStatus"></div>
+</div>
+<div id="setTermShellsRoot"></div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Running Commands</div>
+<p class="set-info">Controls what happens when you click a row on the Snippets and Commands pages, and how much confirmation a run needs before it reaches a shell.</p>
+<div class="set-row"><span>Clicking a Quick Run command</span><select id="setSnipClickAction" class="set-select"><option value="copy">Copies the command</option><option value="run">Runs it in the terminal</option><option value="insert">Types it without running</option><option value="ask">Asks every time</option></select></div>
+<div class="set-row"><span>Clicking a command</span><select id="setCmdClickAction" class="set-select"><option value="copy">Copies the command</option><option value="run">Runs it in the terminal</option><option value="insert">Types it without running</option><option value="ask">Asks every time</option></select></div>
+<div class="set-row"><span>Confirm Quick Run runs</span><select id="setSnipRunConfirm" class="set-select"><option value="always">Always</option><option value="risky">Only risky commands</option><option value="never">Never</option></select></div>
+<div class="set-row"><span>Confirm command runs</span><select id="setCmdRunConfirm" class="set-select"><option value="always">Always</option><option value="risky">Only risky commands</option><option value="never">Never</option></select></div>
+<div class="set-row"><span>Send runs to</span><select id="setRunDestination" class="set-select"><option value="active">The active session</option><option value="new">A new session each time</option><option value="pick">Ask which session</option></select></div>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setTermPasteConfirm"><span>Confirm before pasting multiple lines into the terminal</span></label></div>
+<p class="set-info">A command counts as risky when it is marked destructive, still contains unresolved {PLACEHOLDER} values, asks for elevation, or matches a known destructive pattern.</p>
+<div class="set-status" id="setRunBehaviourStatus"></div>
+</div>
+<div class="set-box glass-panel hidden" id="setFlowBox"></div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Terminal Suggestions and Shortcuts</div>
+<p class="set-info">While you type at the terminal prompt, matching commands from the Commands page appear above the cursor. Tab or Right accepts one, Up and Down choose, Esc dismisses. Nothing runs until you press Enter, and {PLACEHOLDER} values are filled from the live target where possible.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setTermSuggest"><span>Show command suggestions while typing</span></label></div>
+<div id="setTermShortcuts"></div>
+<p class="set-info">Click a box and press the new key combination. Backspace clears it, Esc cancels. Use Ctrl or Alt with a key, or F1-F12. Keys the shell or the app already use (Ctrl+C, D, Z, L, R, U, W, A, E, F, K, V, Ctrl+Tab, Ctrl+1-9) and desktop keys such as Ctrl+Alt+T are refused.</p>
+<div class="set-status" id="setTermShortcutStatus"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Terminal Profiles</div>
+<p class="set-info">Saved session presets: a shell, a starting folder, environment variables and an optional startup command. Detected WSL distributions appear in the shell list automatically.</p>
+<div class="set-profile-list" id="setProfileList"></div>
+<div class="set-profile-form">
+<div class="set-row"><input type="text" id="setProfileName" class="set-input" placeholder="Profile name"><select id="setProfileShell" class="set-select"></select></div>
+<div class="set-row"><input type="text" id="setProfileCwd" class="set-input" placeholder="Starting folder (optional)"><input type="text" id="setProfileStartup" class="set-input" placeholder="Startup command (optional)"></div>
+<div class="set-row"><input type="text" id="setProfileEnv" class="set-input" placeholder="Environment: KEY=value, KEY2=value2"><input type="hidden" id="setProfileId" value=""><button type="button" class="set-btn" id="setProfileSaveBtn">Save Profile</button><button type="button" class="set-btn" id="setProfileResetBtn">Clear</button></div>
+</div>
+<div class="set-status" id="setProfileStatus"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">AI Assistant</div>
+<p class="set-info">A resizable side panel with a circular toggle in the bottom nav. Shown by default. Below you set up the providers the AI chat can use.</p>
+<div class="set-row"><label class="set-check"><input type="checkbox" id="setAiToggle"><span>Enable AI extension</span></label></div>
+<div class="set-status" id="setAiStatus"></div>
+<div class="set-row"><button type="button" class="set-btn" id="setAiDetectBtn">Detect Available Providers</button></div>
+<div class="set-status" id="setAiDetectStatus"></div>
+<div class="ai-provider-box" data-provider="api">
+<div class="ai-provider-head"><label class="set-check"><input type="checkbox" class="ai-provider-enable" data-provider="api"><span>API (Anthropic / OpenAI-compatible)</span></label><button type="button" class="ai-default-btn" data-provider="api" title="Set as default provider"><i class="icon icon-star"></i></button><span class="ai-status-pill" id="aiStatusApi">Unknown</span></div>
+<div class="ai-provider-fields">
+<select class="set-select ai-field" data-provider="api" data-field="provider_kind"><option value="anthropic">Anthropic</option><option value="openai">OpenAI-compatible</option></select>
+<input type="password" class="set-input ai-field" data-provider="api" data-field="api_key" placeholder="API key">
+<input type="text" class="set-input ai-field" data-provider="api" data-field="base_url" placeholder="Base URL (optional)">
+<select class="set-select ai-field ai-model-select" data-provider="api" data-field="model"><option value="">Auto-detect / default</option></select>
+<button type="button" class="set-btn ai-test-btn" data-provider="api">Test Connection</button>
+</div>
+<div class="ai-offline-card glass-panel hidden" id="aiOfflineCardApi"></div>
+</div>
+<div class="ai-provider-box" data-provider="ollama">
+<div class="ai-provider-head"><label class="set-check"><input type="checkbox" class="ai-provider-enable" data-provider="ollama"><span>Ollama (local)</span></label><button type="button" class="ai-default-btn" data-provider="ollama" title="Set as default provider"><i class="icon icon-star"></i></button><span class="ai-status-pill" id="aiStatusOllama">Unknown</span></div>
+<div class="ai-provider-fields">
+<input type="text" class="set-input ai-field" data-provider="ollama" data-field="host" placeholder="Host">
+<input type="text" class="set-input ai-field" data-provider="ollama" data-field="port" placeholder="Port">
+<select class="set-select ai-field ai-model-select" data-provider="ollama" data-field="model"><option value="">Auto-detect / default</option></select>
+<button type="button" class="set-btn ai-test-btn" data-provider="ollama">Test Connection</button>
+</div>
+<div class="ai-offline-card glass-panel hidden" id="aiOfflineCardOllama"></div>
+<div class="ai-pull-row">
+<input type="text" class="set-input" id="aiOllamaPullInput" list="aiOllamaSuggestList" placeholder="Model to pull, e.g. gemma2:9b or qwen3-coder:480b-cloud">
+<datalist id="aiOllamaSuggestList"></datalist>
+<button type="button" class="set-btn" id="aiOllamaPullBtn">Pull Model</button>
+</div>
+<div class="ai-pull-status" id="aiOllamaPullStatus"></div>
+</div>
+<div class="ai-provider-box" data-provider="lmstudio">
+<div class="ai-provider-head"><label class="set-check"><input type="checkbox" class="ai-provider-enable" data-provider="lmstudio"><span>LM Studio (local)</span></label><button type="button" class="ai-default-btn" data-provider="lmstudio" title="Set as default provider"><i class="icon icon-star"></i></button><span class="ai-status-pill" id="aiStatusLmstudio">Unknown</span></div>
+<div class="ai-provider-fields">
+<input type="text" class="set-input ai-field" data-provider="lmstudio" data-field="host" placeholder="Host">
+<input type="text" class="set-input ai-field" data-provider="lmstudio" data-field="port" placeholder="Port">
+<select class="set-select ai-field ai-model-select" data-provider="lmstudio" data-field="model"><option value="">Auto-detect / default</option></select>
+<button type="button" class="set-btn ai-test-btn" data-provider="lmstudio">Test Connection</button>
+</div>
+<div class="ai-offline-card glass-panel hidden" id="aiOfflineCardLmstudio"></div>
+</div>
+<div class="ai-provider-box" data-provider="mcp">
+<div class="ai-provider-head"><label class="set-check"><input type="checkbox" class="ai-provider-enable" data-provider="mcp"><span>MCP Server (external, as AI backend)</span></label><button type="button" class="ai-default-btn" data-provider="mcp" title="Set as default provider"><i class="icon icon-star"></i></button><span class="ai-status-pill" id="aiStatusMcp">Unknown</span></div>
+<div class="ai-provider-fields">
+<input type="text" class="set-input ai-field" data-provider="mcp" data-field="url" placeholder="Server URL">
+<button type="button" class="set-btn ai-test-btn" data-provider="mcp">Test Connection</button>
+<button type="button" class="set-btn primary" id="setMcpLocalStartBtn">Start Local Server</button>
+<button type="button" class="set-btn danger hidden" id="setMcpLocalStopBtn">Stop Local Server</button>
+</div>
+<p class="set-info">No external MCP server? Start a local one bundled with LOYA NG, exposing its own Notes/Commands/Targets tools over HTTP on 127.0.0.1 - this fills in the Server URL above and enables the provider automatically.</p>
+<div class="set-status" id="setMcpLocalStatus"></div>
+<div class="ai-offline-card glass-panel hidden" id="aiOfflineCardMcp"></div>
+</div>
+<div class="ai-provider-box" data-provider="semantic">
+<div class="ai-provider-head"><span>Semantic Search (RAG)</span><span class="ai-status-pill" id="setSemanticModePill">Unknown</span></div>
+<p class="set-info">Automatically pulls your most relevant notes/commands into context for every chat message. Uses a local Ollama embedding model when available (e.g. nomic-embed-text), otherwise falls back to plain keyword matching. Respects the Notes/Commands Read permissions in AI Roles.</p>
+<div class="set-row"><span class="set-status" id="setSemanticStatus"></span><button type="button" class="set-btn" id="setSemanticRebuildBtn">Rebuild Index</button></div>
+</div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">External Agents</div>
+<p class="set-info set-moved-note">Claude Agent, OpenAI Codex and connecting your own Claude Code / Codex CLI are now under <button type="button" class="set-link-btn" data-goto-ai="agents">AI &gt; Agents</button>.</p>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="ai">
+<div class="set-subtabs" role="tablist" aria-label="AI settings">
+<button type="button" class="set-subtab active" role="tab" aria-selected="true" data-ai-tab="roles">Roles</button>
+<button type="button" class="set-subtab" role="tab" aria-selected="false" data-ai-tab="agents">Agents</button>
+</div>
+<div class="set-subpanel active" data-ai-panel="roles" role="tabpanel">
+<div class="set-box glass-panel">
+<div class="set-box-title">AI Roles &amp; Permissions</div>
+<p class="set-info">Controls what the AI may do when it operates LOYA NG through its tools - in the AI panel, for External Agents (Claude Agent, OpenAI Codex) and for external MCP clients. Pick a role, or set each permission to Allow, Ask or Deny.</p>
+<div id="setAiRolesRoot"></div>
+</div>
+<div class="set-box glass-panel set-box-danger">
+<div class="set-box-title">Terminal Access <span class="set-danger-pill">Shell access</span></div>
+<p class="set-info">Terminal, Quick Run and Action Chain permissions give the AI a shell on this machine. They are Deny by default and are marked Shell in the table above. Scan output the model reads could itself contain instructions aimed at the model.</p>
+<div class="set-row"><label class="set-label" for="setAiTerminalApproval">When the AI asks to run a command</label><select id="setAiTerminalApproval" class="set-select"><option value="ask">Ask me every time (recommended)</option><option value="allow">Run without asking</option></select></div>
+<p class="set-info" id="setAiTerminalApprovalNote"></p>
+<div class="set-status" id="setAiRolesStatus"></div>
+</div>
+</div>
+<div class="set-subpanel" data-ai-panel="agents" role="tabpanel">
+<div class="set-box glass-panel">
+<div class="set-box-title">External Agents</div>
+<div id="setExtAgentsRoot"></div>
+</div>
+<div class="set-box glass-panel">
+<div class="set-box-title">Connections</div>
+<div id="setExtConnectionsRoot"></div>
+</div>
+</div>
+</div>
+<div class="set-panel" data-tab-panel="cve"><div id="setCveRoot"></div></div>

@@ -1,0 +1,91 @@
+/* Reporting: export / import dialogs and the report defaults form (window.ReportExport). Classes are prefixed rpt-x-. */
+.rpt-x{display:flex;flex-direction:column;gap:10px;min-width:0;font-family:var(--font-ui);color:var(--text)}
+.rpt-x-sub{display:flex;align-items:baseline;gap:10px;min-width:0;padding-bottom:2px}
+.rpt-x-sub-title{font-size:13px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpt-x-sub-meta{flex:0 0 auto;font-size:11px;color:var(--text-dim)}
+.rpt-x-label{font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim);margin-top:4px}
+.rpt-x-label.off{opacity:0.45}
+.rpt-x-formats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rpt-x-format{display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:0;padding:10px 11px;border-radius:11px;border:1px solid var(--glass-border);background:var(--rpt-field-bg,transparent);color:var(--text);font-family:inherit;text-align:left;cursor:pointer;-webkit-user-select:none;user-select:none;transition:border-color 120ms ease,background 120ms ease,box-shadow 120ms ease}
+.rpt-x-format:hover{border-color:var(--accent-a)}
+.rpt-x-format:focus-visible{outline:2px solid var(--accent-a);outline-offset:1px}
+.rpt-x-format.active{border-color:var(--accent-a);background:linear-gradient(135deg,var(--accent-a-soft),var(--accent-b-soft));box-shadow:0 0 0 1px var(--accent-a) inset}
+.rpt-x-format-top{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+.rpt-x-format-name{font-size:13px;font-weight:700}
+.rpt-x-format-ext{font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+.rpt-x-format-desc{font-size:11px;line-height:1.35;color:var(--text-dim);white-space:normal}
+.rpt-x-format.active .rpt-x-format-desc{color:var(--text)}
+.rpt-x-options{display:grid;grid-template-columns:minmax(170px,220px) minmax(0,1fr);gap:14px;align-items:start}
+.rpt-x-fields{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rpt-x-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.rpt-x-check[hidden]{display:none}
+.rpt-x-field.off{opacity:0.45}
+.rpt-x-field-label{font-size:11px;font-weight:600;color:var(--text-dim)}
+.rpt-x-select{width:100%}
+.rpt-x-toggles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.rpt-x-check{display:flex;align-items:flex-start;gap:8px;min-width:0;font-size:12px;color:var(--text);cursor:pointer;-webkit-user-select:none;user-select:none}
+.rpt-x-check input{flex:0 0 auto;margin:2px 0 0;accent-color:var(--accent-a);cursor:pointer}
+/* base.css paints every light-theme checkbox white, checked or not; keep the checked state visible here. */
+.rpt-x-check input[type="checkbox"]:checked{background:var(--accent-a);border-color:var(--accent-a)}
+.rpt-x-check.off{opacity:0.45;cursor:default}
+.rpt-x-check.off input{cursor:default}
+.rpt-x-check-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rpt-x-check-label{font-weight:600}
+.rpt-x-check-hint{font-size:11px;line-height:1.35;color:var(--text-dim)}
+.rpt-x-statuses{display:flex;flex-wrap:wrap;gap:8px}
+.rpt-x-chip{align-items:center;padding:6px 11px;border-radius:999px;border:1px solid var(--glass-border);background:var(--rpt-field-bg,transparent)}
+.rpt-x-chip input{margin:0}
+.rpt-x-note{font-size:11px;line-height:1.45;color:var(--text-dim);min-height:0}
+.rpt-x-note:empty{display:none}
+.rpt-x-note.warn{padding:7px 10px;border-radius:9px;border:1px solid color-mix(in srgb,var(--rpt-sev-medium,#f59e0b) 55%,transparent);background:color-mix(in srgb,var(--rpt-sev-medium,#f59e0b) 12%,transparent);color:var(--text)}
+.rpt-x-status{font-size:12px;line-height:1.45;color:var(--text-dim);min-height:17px;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.rpt-x-status.error{color:var(--danger)}
+.rpt-x-status.ok{color:var(--text)}
+.rpt-x-saved-label{color:var(--rpt-ok,var(--accent-a));font-weight:700}
+.rpt-x-saved-path{font-family:var(--font-mono);font-size:11px}
+.rpt-x-link{margin-left:8px;padding:0;border:none;background:none;color:var(--accent-a);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline}
+.rpt-x-link:focus-visible{outline:2px solid var(--accent-a);outline-offset:2px}
+/* import */
+.rpt-x-drop{display:flex;align-items:center;gap:14px;padding:22px 18px;border-radius:12px;border:1.5px dashed var(--glass-border);background:transparent;color:var(--text-dim);cursor:pointer;transition:border-color 120ms ease,background 120ms ease}
+.rpt-x-drop:hover,.rpt-x-drop:focus-visible{border-color:var(--accent-a);outline:none}
+.rpt-x-drop.drag-over{border-color:var(--accent-a);border-style:solid;background:linear-gradient(135deg,var(--accent-a-soft),var(--accent-b-soft));color:var(--text)}
+.rpt-x-drop-icon{width:24px;height:24px;flex:0 0 auto;color:var(--accent-a)}
+.rpt-x-drop-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;pointer-events:none}
+.rpt-x-drop-text strong{font-size:13px;color:var(--text)}
+.rpt-x-drop-text span{font-size:11px}
+.rpt-x-chips{display:flex;flex-wrap:wrap;gap:6px}
+.rpt-x-chips:empty{display:none}
+.rpt-x-count{padding:4px 10px;border-radius:999px;border:1px solid var(--glass-border);background:var(--rpt-field-bg,transparent);font-size:11px;font-weight:600;color:var(--text)}
+.rpt-x-sevs{display:flex;flex-wrap:wrap;gap:6px}
+.rpt-x-sev{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;color:var(--text)}
+.rpt-x-sev.zero{opacity:0.4}
+.rpt-x-items{display:flex;flex-direction:column;max-height:230px;overflow:auto;border:1px solid var(--glass-border);border-radius:10px;background:var(--rpt-field-bg,transparent);scrollbar-width:thin;scrollbar-color:var(--glass-border) transparent}
+.rpt-x-items::-webkit-scrollbar{width:8px}
+.rpt-x-items::-webkit-scrollbar-thumb{background:var(--glass-border);border-radius:8px}
+.rpt-x-item{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 11px;font-size:12px;border-bottom:1px solid var(--glass-border)}
+.rpt-x-item:last-child{border-bottom:none}
+.rpt-x-item-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);-webkit-user-select:text;user-select:text}
+.rpt-x-item-detail{flex:0 0 auto;font-size:11px;color:var(--text-dim)}
+.rpt-x-item-more{justify-content:center;color:var(--text-dim);font-size:11px}
+.rpt-x-warn{padding:8px 11px;border-radius:9px;border:1px solid color-mix(in srgb,var(--rpt-sev-medium,#f59e0b) 55%,transparent);background:color-mix(in srgb,var(--rpt-sev-medium,#f59e0b) 12%,transparent);font-size:11px;line-height:1.45;color:var(--text)}
+.rpt-x-done{padding:18px 4px;font-size:13px;font-weight:600;color:var(--text)}
+/* report defaults form (Settings) */
+.rpt-x-defaults-box{margin-top:14px}
+.rpt-x-defaults{display:flex;flex-direction:column;gap:12px;min-width:0}
+.rpt-x-defgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px}
+.rpt-x-defgrid-wide{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.rpt-x-defaults .rpt-x-toggles{grid-template-columns:repeat(4,minmax(0,1fr))}
+.rpt-x-color{display:flex;align-items:center;gap:8px;min-width:0}
+.rpt-x-swatch{flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--glass-border)}
+.rpt-x-testers{resize:vertical;min-height:62px;line-height:1.45}
+.rpt-x-logo{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.rpt-x-logo-prev{display:flex;align-items:center;justify-content:center;min-width:96px;height:44px;padding:4px 8px;border-radius:8px;border:1px dashed var(--glass-border);background:#fff;color:#6b7280;font-size:11px}
+.rpt-x-logo-prev img{max-width:140px;max-height:36px;display:block}
+.rpt-x-defactions{display:flex;align-items:center;gap:12px;min-width:0}
+.rpt-x-defactions .rpt-x-status{flex:1;min-width:0}
+@media (max-width:900px){
+.rpt-x-formats{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rpt-x-options{grid-template-columns:minmax(0,1fr)}
+.rpt-x-defgrid,.rpt-x-defgrid-wide{grid-template-columns:minmax(0,1fr)}
+.rpt-x-defaults .rpt-x-toggles{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

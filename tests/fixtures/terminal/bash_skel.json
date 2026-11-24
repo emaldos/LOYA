@@ -1,0 +1,86 @@
+{
+"shell": "bash",
+"cols": 120,
+"rc": "/etc/skel/.bashrc",
+"events": [
+{
+"out": "\u001b[?2004h\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+},
+{
+"submit": "ls",
+"jobId": "jbls01",
+"sent": "ls ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbls01' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "ls ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbls01' \"$?\" \"$PWD\"\r\n\u001b[?2004l\r"
+},
+{
+"out": "alpha.txt\r\n"
+},
+{
+"out": "__LOYA_JOB__jbls01|0|/home/user__END__\r\n\r\n\u001b[?2004h"
+},
+{
+"out": "\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+},
+{
+"submit": "ls )",
+"jobId": "jbsy02",
+"sent": "ls ) ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbsy02' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "ls ) ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbsy02' \"$?\" \"$PWD\"\r\n\u001b[?2004l\rbash: syntax error near unexpected token `)'\r\n\r\n"
+},
+{
+"out": "\u001b[?2004h\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+},
+{
+"submit": "echo \"unterminated",
+"jobId": "jbop03",
+"sent": "echo \"unterminated\n"
+},
+{
+"out": "echo \"unterminated\r\n\u001b[?2004l\r\u001b[?2004h> "
+},
+{
+"control": "\u0003"
+},
+{
+"out": "^C\u001b[?2004l\r\u001b[?2004h\u001b[?2004l\r\r\n\r\n"
+},
+{
+"out": "\u001b[?2004h\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+},
+{
+"submit": "sleep 5",
+"jobId": "jbin04",
+"sent": "sleep 5 ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbin04' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "sleep 5 ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbin04' \"$?\" \"$PWD\"\r\n\u001b[?2004l\r"
+},
+{
+"control": "\u0003"
+},
+{
+"out": "^C"
+},
+{
+"out": "\r\n\r\n\u001b[?2004h\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+},
+{
+"submit": "echo hi # it's a comment",
+"jobId": "jbco05",
+"sent": "echo hi ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbco05' \"$?\" \"$PWD\"\n"
+},
+{
+"out": "echo hi ;printf '__LOYA_JOB__%s|%s|%s__END__\\n' 'jbco05' \"$?\" \"$PWD\"\r\n\u001b[?2004l\rhi\r\n__LOYA_JOB__jbco05|0|/home/user__END__"
+},
+{
+"out": "\r\n\r\n"
+},
+{
+"out": "\u001b[?2004h\u001b]0;user@kali: ~\u0007\u001b[;32m\u250c\u2500\u2500(\u001b[1;34muser\u327fkali\u001b[;32m)-[\u001b[0;1m~\u001b[;32m]\r\r\n\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m \r\u001b[;32m\u2514\u2500\u001b[1;34m$\u001b[0m "
+}
+]
+}

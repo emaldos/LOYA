@@ -1,0 +1,29 @@
+/* Chains studio shell (pages/chains_flow.js, .cf-*): the head bar, the run strip and the properties panel around the canvas.
+   Loaded after flow-panels.css and before glass.css. Theme tokens only. */
+.cf-view{gap:10px;padding:12px}
+.cf-head{gap:8px 12px;padding:8px 10px;border-radius:14px;border:1px solid var(--glass-border);background:var(--glass-bg)}
+.cf-name{font-size:15.5px;letter-spacing:0.01em}
+.cf-caller{padding:2px 8px;border-radius:999px;border:1px solid var(--glass-border)}
+.cf-caller:empty{display:none}
+.cf-actions{gap:5px}
+.cf-btn{height:30px;border-radius:9px}
+.cf-btn .icon{width:13px;height:13px}
+/* the quiet actions are icon buttons; their names are in the tooltips */
+.cf-actions .cf-btn:is([data-cf="templates"],[data-cf="import"],[data-cf="export"],[data-cf="revert"],[data-cf="delete"],[data-cf="settings"]){width:30px;padding:0;justify-content:center}
+.cf-actions .cf-btn:is([data-cf="templates"],[data-cf="import"],[data-cf="export"],[data-cf="revert"],[data-cf="delete"],[data-cf="settings"]) span{display:none}
+.cf-btn.cf-run-btn:not(:disabled){color:var(--flow-on-accent);border-color:transparent;background:linear-gradient(120deg,var(--accent-a),var(--accent-b));box-shadow:0 4px 14px color-mix(in srgb,var(--accent-a) 35%,transparent);padding:0 14px}
+.cf-btn.cf-run-btn:hover:not(:disabled){filter:brightness(1.1);background:linear-gradient(120deg,var(--accent-a),var(--accent-b))}
+.cf-main{gap:10px}
+.cf-left{gap:10px}
+.cf-side,.cf-run{border-radius:14px}
+.cf-run{box-shadow:inset 0 2px 0 0 color-mix(in srgb,var(--accent-a) 45%,transparent)}
+/* narrow room: the old palette is gone, the canvas keeps its full width */
+.cf-compact .cf-side{max-width:calc(100% - 40px)}
+html:where([data-style="glass"]) .cf-head{box-shadow:inset 0 1px 0 0 var(--gl-spec),inset 0 -1px 0 0 var(--gl-under)}
+/* the properties panel slides over the canvas while one node is selected, so the canvas never resizes under the pointer */
+.cf-main{position:relative}
+.cf-side{position:absolute;top:0;right:0;bottom:0;z-index:8;max-width:calc(100% - 40px);background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--bg);box-shadow:var(--flow-shadow-lg)}
+.cf-view:not(.cf-has-sel) .cf-side{display:none}
+.cf-has-sel .flow-hotbar{left:calc((100% - var(--cf-side-w,340px))/2);max-width:calc(100% - var(--cf-side-w,340px) - 370px)}
+.cf-has-sel .flow-minimap{display:none}
+.cf-has-run .flow-hotbar{display:none}

@@ -1,0 +1,43 @@
+<div class="cmds-toolbar chains-toolbar">
+<div class="chh-switch" role="tablist" aria-label="Chains views"><button type="button" role="tab" class="chh-switch-btn active" data-chains-tab="chains" aria-selected="true"><i class="icon icon-chain"></i><span>Chains</span></button><button type="button" role="tab" class="chh-switch-btn" data-chains-tab="history" aria-selected="false" title="Every run of every chain: status, duration, logs"><i class="icon icon-clock"></i><span>Run History</span></button></div>
+<div class="cmds-search chh-chains-only"><i class="icon icon-search"></i><input type="text" id="chainsSearchInput" placeholder="Search action chains..." autocomplete="off" spellcheck="false"></div>
+<span class="chains-count chh-chains-only" id="chainsCount"></span>
+<div class="chains-toolbar-slot" id="chainsToolbarSlot"></div>
+<button type="button" class="chains-tool-btn chh-chains-only" id="chainsExportBtn" title="Export one, several or all chains (optionally with their run history) as a bundle file"><i class="icon icon-copy"></i><span>Export</span></button>
+<button type="button" class="chains-tool-btn chh-chains-only" id="chainsImportBundleBtn" title="Import chains and run history from a bundle file"><i class="icon icon-file"></i><span>Import bundle</span></button>
+<button type="button" class="chains-tool-btn hidden" id="chainsNewDiagramBtn" title="Build a chain as a flow diagram"><i class="icon icon-chain"></i><span>New Diagram</span></button>
+<button type="button" class="cmds-new-btn chh-chains-only" id="chainsNewBtn"><i class="icon icon-add"></i><span>New Action Chain</span></button>
+<div class="cmds-search chh-history-only"><i class="icon icon-search"></i><input type="text" id="chhSearchInput" placeholder="Search runs: chain, target, run id..." autocomplete="off" spellcheck="false"></div>
+<span class="chains-count chh-history-only" id="chhCount"></span>
+<button type="button" class="chains-tool-btn chh-history-only" id="chhRefreshBtn" title="Reload the run history"><i class="icon icon-refresh"></i><span>Refresh</span></button>
+<button type="button" class="chains-tool-btn chh-history-only" id="chhImportBtn" title="Import chains and run history from a bundle file"><i class="icon icon-file"></i><span>Import</span></button>
+<button type="button" class="chains-tool-btn chh-history-only" id="chhExportBtn" title="Export the selected runs, a chain's runs or the whole history"><i class="icon icon-copy"></i><span>Export</span></button>
+<button type="button" class="chains-tool-btn chh-history-only chh-danger-btn" id="chhDeleteBtn" title="Delete the selected runs" disabled><i class="icon icon-trash"></i><span>Delete</span></button>
+<button type="button" class="chains-tool-btn chh-history-only chh-danger-btn" id="chhClearBtn" title="Delete every run of the chosen chain, or the whole history"><i class="icon icon-trash"></i><span>Clear...</span></button>
+</div>
+<div class="cmds-playbooks-wrap glass-panel" id="cmdsPlaybooksWrap">
+<div class="cmds-playbooks-list chains-list" id="cmdsPlaybooksList"></div>
+<div class="cmds-playbook-detail hidden" id="cmdsPlaybookDetail">
+<div class="cmds-playbook-detail-head">
+<button type="button" class="cmds-playbook-back" id="cmdsPlaybookBackBtn"><i class="icon icon-arrow-left"></i><span>All chains</span></button>
+<h3 id="cmdsPlaybookTitle"></h3>
+<div class="chains-view-switch-slot" id="chainsViewSwitchSlot"></div>
+<div class="cmds-playbook-detail-actions">
+<button type="button" class="hidden" id="chainsOpenDiagramBtn" title="Open this chain as a flow diagram">Diagram</button>
+<button type="button" id="cmdsPlaybookRunAllBtn">Run All</button>
+<button type="button" id="chainsDetailHistoryBtn" title="Earlier runs of this chain">Run History</button>
+<button type="button" id="cmdsPlaybookStepThroughBtn">Start Step-Through</button>
+<button type="button" id="cmdsPlaybookAddStepBtn">Add Step</button>
+<button type="button" class="danger" id="cmdsPlaybookDeleteBtn">Delete Action Chain</button>
+</div>
+</div>
+<div class="cmds-chain-caller-row"><div class="cmds-chain-caller" id="cmdsChainCallerWrap" title="Run this chain by typing /caller in the terminal or the AI input"><span class="cmds-chain-caller-slash">/</span><input type="text" id="cmdsChainCallerInput" maxlength="32" spellcheck="false" autocomplete="off" placeholder="caller"></div><span class="cmds-chain-caller-err" id="cmdsChainCallerErr"></span><span class="cmds-chain-caller-hint">Type /caller in the terminal or the AI input to run this chain on the live target.</span></div>
+<div id="cmdsChainRunHost"></div>
+<div class="chains-editor-area" id="chainsEditorArea">
+<div class="cmds-playbook-steps" id="cmdsPlaybookSteps"></div>
+<div class="chains-diagram-host hidden" id="chainsDiagramHost"></div>
+</div>
+</div>
+</div>
+<div class="chains-flow-host hidden" id="chainsFlowHost"></div>
+<div class="chh-host glass-panel hidden" id="chainsHistoryHost" role="tabpanel" aria-label="Run History"></div>

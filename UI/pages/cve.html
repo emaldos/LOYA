@@ -1,0 +1,64 @@
+<div class="cve-page">
+<div class="cve-head">
+<div class="cve-tabs" role="tablist">
+<button type="button" class="cve-tab active" data-cve-tab="lookup" role="tab">Lookup</button>
+<button type="button" class="cve-tab" data-cve-tab="news" role="tab">News<span class="cve-tab-badge hidden" id="cveNewsBadge"></span></button>
+</div>
+<div class="cve-head-status" id="cveHeadStatus"></div>
+</div>
+<div class="cve-banner hidden" id="cveBanner"><i class="icon icon-info"></i><span id="cveBannerText"></span><button type="button" class="set-btn" id="cveBannerBtn">Open Settings</button></div>
+<div class="cve-view" data-cve-view="lookup">
+<div class="cve-lookup-col">
+<div class="cve-search glass-panel">
+<textarea id="cveSearchInput" class="cve-search-input" rows="2" spellcheck="false" autocomplete="off" placeholder="Search or paste CVE IDs or any text containing them"></textarea>
+<div class="cve-search-row">
+<div class="cve-chips" id="cveChips"></div>
+<button type="button" class="set-btn primary" id="cveLookupBtn" disabled>Look up</button>
+</div>
+<div class="cve-search-filters"><select id="cveSSeverity" class="set-select" aria-label="Minimum severity of the search results" title="Minimum severity of the search results"><option value="">Any severity</option><option value="low">Low+</option><option value="medium">Medium+</option><option value="high">High+</option><option value="critical">Critical</option></select><label class="set-check"><input type="checkbox" id="cveSKev"><span>KEV only</span></label></div>
+<div class="cve-hint" id="cveSearchHint">Enter looks up the detected IDs. Other text searches the CVEs saved on this computer and the offline index (ID, product or keyword).</div>
+</div>
+<div class="cve-results glass-panel">
+<div class="cve-results-title" id="cveResultsTitle">Saved CVEs</div>
+<div class="cve-results-list" id="cveResultsList"></div>
+</div>
+</div>
+<div class="cve-detail glass-panel" id="cveDetail"></div>
+</div>
+<div class="cve-view hidden" data-cve-view="news">
+<div class="cve-news-bar glass-panel">
+<div class="cve-filters">
+<label class="cve-filter"><span>Min severity</span><select id="cveFSeverity" class="set-select"><option value="">Any</option><option value="low">Low+</option><option value="medium">Medium+</option><option value="high">High+</option><option value="critical">Critical</option></select></label>
+<label class="cve-filter"><span>EPSS &ge; %</span><input type="number" id="cveFEpss" class="set-input cve-input-sm" min="0" max="100" step="1" placeholder="0"></label>
+<label class="cve-filter cve-filter-grow"><span>Keywords</span><input type="text" id="cveFQuery" class="set-input" placeholder="Vendor, product or text" autocomplete="off" spellcheck="false"></label>
+<label class="cve-filter"><span>From</span><input type="date" id="cveFFrom" class="set-input cve-input-date" placeholder="YYYY-MM-DD" required></label>
+<label class="cve-filter"><span>To</span><input type="date" id="cveFTo" class="set-input cve-input-date" placeholder="YYYY-MM-DD" required></label>
+</div>
+<div class="cve-filters cve-filters-2">
+<label class="set-check"><input type="checkbox" id="cveFKev"><span>KEV only</span></label>
+<label class="set-check"><input type="checkbox" id="cveFUnread"><span>Unread only</span></label>
+<label class="set-check"><input type="checkbox" id="cveFWatch"><span>Watchlist only</span></label>
+<button type="button" class="set-btn" id="cveFReset">Reset filters</button>
+<span class="cve-spacer"></span>
+<span class="cve-news-status" id="cveNewsStatus"></span>
+<button type="button" class="set-btn" id="cveMarkAllBtn">Mark all read</button>
+<button type="button" class="set-btn primary" id="cveRefreshBtn"><i class="icon icon-refresh"></i><span>Refresh now</span></button>
+</div>
+<div class="cve-news-error hidden" id="cveNewsError"></div>
+</div>
+<div class="cve-news-body">
+<div class="cve-feed glass-panel">
+<div class="cve-feed-list" id="cveFeedList"></div>
+<div class="cve-feed-foot"><span id="cveFeedTotal"></span><button type="button" class="set-btn hidden" id="cveFeedMore">Show more</button></div>
+</div>
+<aside class="cve-watch glass-panel">
+<div class="cve-watch-title">Watchlist</div>
+<p class="cve-hint">Products and keywords you care about. New CVEs that match are flagged here and in the notification bell.</p>
+<div class="cve-watch-add"><input type="text" id="cveWatchInput" class="set-input" maxlength="80" placeholder="e.g. apache tomcat" autocomplete="off" spellcheck="false"><button type="button" class="set-btn" id="cveWatchAddBtn">Add</button></div>
+<div class="cve-watch-list" id="cveWatchList"></div>
+<div class="set-status" id="cveWatchStatus"></div>
+</aside>
+</div>
+</div>
+<div class="cve-notice" id="cveNotice"></div>
+</div>

@@ -1,0 +1,21 @@
+<div class="snip-toolbar">
+<div class="snip-search"><i class="icon icon-search"></i><input type="text" id="snipSearchInput" placeholder="Search Quick Run..."></div>
+<div class="snip-sort-wrap">
+<button class="snip-sort-btn" id="snipSortBtn"><span id="snipSortLabel">Sort By</span><i class="icon icon-arrow-down"></i></button>
+<div class="snip-sort-menu hidden" id="snipSortMenu">
+<button type="button" data-mode="A -> Z">A -&gt; Z</button>
+<button type="button" data-mode="Z -> A">Z -&gt; A</button>
+<button type="button" data-mode="Newest">Newest</button>
+<button type="button" data-mode="Fav First">Fav First</button>
+</div>
+</div>
+<button class="snip-fav-btn" id="snipFavBtn"><i class="icon icon-star"></i><span>Favorites</span></button>
+</div>
+<div class="snip-table-wrap glass-panel">
+<table class="snip-table">
+<thead><tr><th class="snip-col-fav"></th><th>Shell</th><th>Category</th><th>Sub Category</th><th>Command</th><th class="snip-col-run"></th></tr></thead>
+<tbody id="snipTableBody"></tbody>
+</table>
+<div class="snip-empty-msg hidden" id="snipEmptyMsg">No snippets found</div>
+</div>
+<div class="snip-total" id="snipTotal"></div>

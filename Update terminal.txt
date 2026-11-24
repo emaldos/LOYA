@@ -1,0 +1,1646 @@
+================================================================================
+LOYA NOTE NG - TERMINAL UPDATE PLAN
+Document version: 1.0
+Created: 2026-08-02
+Target app version: 1.0.0
+================================================================================
+
+PURPOSE
+-------
+A complete idea bank for upgrading the Terminal extension: logic, UI/UX,
+job control, integrations, security, performance, and cross-platform work.
+The last section splits everything into numbered sessions sized so one AI
+session can finish one item without running out of tokens, plus a tracking
+table to mark progress. See that table for what is already done.
+
+
+================================================================================
+0. CODE STYLE - MANDATORY FOR EVERY SESSION IN THIS DOCUMENT
+================================================================================
+
+Any AI or person implementing an item below MUST follow these rules. They are
+not suggestions. Existing code in this repo already complies; new code must
+match it exactly.
+
+UI/UX ROLES
+  - Compressed format - no blank lines, no inline comments, no docstrings
+  - Clean names - readable variable/function names despite the compression
+  - Best practices - idiomatic patterns for each language
+  - No online icons - save free icons locally in Assets/Icon/, reference them
+    with local paths
+  - No online dependencies - all CSS, JS, fonts, and icons must be local files
+  - Separate files - HTML, CSS, Python, and JS in their own files
+    (no inline styles / no inline scripts)
+  - One-line CSS blocks - each rule on a single line, no line breaks inside
+    a rule
+
+BACKEND ROLES
+  - Compressed format - no blank lines, no inline comments, no docstrings
+  - Clean names - readable variable/function names despite the compression
+  - Best practices - idiomatic patterns for each language
+
+NOTES ON APPLYING THESE RULES IN THIS REPO
+  - The icon folder on disk is Assets/icons/ (lowercase, plural). All 48
+    existing icons and every mask-image rule in UI/css/components.css use that
+    path. Keep using Assets/icons/ so nothing breaks. If the folder is ever
+    renamed to Assets/Icon/, components.css must be rewritten in the same
+    commit.
+  - Icons are not <img> tags. They are CSS masks:
+    .icon-NAME{-webkit-mask-image:url(../../Assets/icons/NAME.svg);mask-image:url(../../Assets/icons/NAME.svg)}
+    added to UI/css/components.css, used as <i class="icon icon-NAME"></i>.
+    This is what lets icons inherit the theme colour. Follow it for every new
+    icon.
+  - Blank lines and """...""" inside string literals are content, not style
+    violations. Template text, prompts and generated HTML strings are fine.
+  - UI/css/theme.css and UI/js/theme-tokens.json are GENERATED at every launch
+    by Cores/Theme/tokens.py. Never hand-edit them. To add a colour token, edit
+    the GLASS dict in tokens.py or the palettes in Cores/Theme/palettes.py.
+  - Python assignment style is x=1, not x = 1. Match it.
+  - Every JS to Python call goes through bridgeCall("namespace.method",[args])
+    from UI/js/bridge.js. Do not invent another transport.
+
+
+================================================================================
+1. WHERE THE TERMINAL IS TODAY
+================================================================================
+
+FILES
+  Cores/Services/terminal_service.py   Session objects, shells, elevation, settings
+  Cores/Bridge/api.py (TerminalAPI)    Bridge surface exposed to JS
+  UI/js/components/terminal.js         All frontend logic (598 lines)
+  UI/css/terminal.css                  Panel, tabs, ANSI classes, widgets
+  UI/windows/main.html                 #terminalPanel markup
+
+WHAT WORKS
+  - Multiple shell sessions as tabs (cmd / powershell / pwsh / $SHELL)
+  - Elevated session on Windows via UAC + local socket helper, pkexec on Linux
+  - ANSI SGR colour parsing to themed CSS classes
+  - IP and URL detection in output, click to save as a Target
+  - ls / dir / Get-ChildItem output parsed into a sortable table widget
+  - "history" keyword renders a clickable history widget
+  - Save session output as a Note or a .txt file
+  - Panel width persisted, resizable, enable/disable from Settings
+  - Per-tab command history with Up/Down recall
+
+WHAT IS STRUCTURALLY MISSING
+  - No concept of a "job". A session is a shell; a command is just bytes.
+    There is no start, no end, no exit code, no duration, no kill.
+  - No exit-code awareness at all.
+  - Windows uses pipes, not a PTY. No resize, no interactive TUI, no colour
+    from most tools, and reading is one byte at a time.
+  - Output rendering rebuilds the whole innerHTML from the whole buffer on
+    every 200 ms poll tick.
+  - Snippets and Commands can only "Copy" on click. Run in Terminal is buried
+    in a right-click menu and never asks for confirmation.
+
+
+================================================================================
+2. BUGS FOUND WHILE READING THE CURRENT CODE
+================================================================================
+
+These are real defects, not ideas. Fix them early - several sessions below
+depend on them.
+
+BUG-1  CORRECTED - Ctrl+C was never broken. The Ctrl+C handler looked like it
+       sent an empty string, but a byte dump of the file showed the source held
+       a RAW 0x03 control character between the quotes. Editors and diff tools
+       render it as "", which is what made it look like a no-op. Interrupt has
+       always worked.
+       The real defect was fragility, not behaviour: an invisible control byte
+       embedded in source survives neither a copy-paste, a re-encode, nor most
+       linters. Resolved in S02 by replacing it with the explicit "\x03" escape
+       and adding the other control keys alongside it.
+       Lesson for the rest of this document: verify control characters with
+       "od -c" or "grep -P" before calling them missing.
+
+BUG-2  Windows read loop reads 1 byte at a time.
+       terminal_service.py line 51: stream.read(1) in a tight loop, one Python
+       iteration and one lock acquisition per byte. A command producing 1 MB of
+       output costs a million iterations. Read in chunks.
+
+BUG-3  RESOLVED in S04 - full re-render on every poll tick.
+       termRenderActiveOutput() re-parsed ANSI over the entire buffer and
+       reassigned out.innerHTML five times a second, re-attaching every event
+       listener each time.
+       The rewrite commits only COMPLETE lines to an append-only node and keeps
+       the trailing partial line in a separate node that is replaced each tick.
+       That boundary matters: an ANSI escape or an IP/URL token split across two
+       poll chunks would otherwise be mangled or missed, which a first attempt
+       at naive appending did in fact do. A guard force-commits a trailing line
+       longer than 8 KB so a newline-free stream cannot make the tail re-render
+       unbounded. Verified against a full render across 500 random 1-6 char
+       chunk splits with per-character style comparison - zero divergence.
+
+BUG-4  Elevated helper socket has no authentication.
+       terminal_service.py ElevatedSession binds 127.0.0.1 on a random port and
+       accepts the first connection. The port is passed on the helper's command
+       line, which is readable by any local process. A local process can race
+       the helper, connect first, and receive a fully elevated shell. Add a
+       one-time random token that the helper must send as its first frame, and
+       reject any connection that does not match.
+
+BUG-5  Elevated helper source is written to a predictable temp location.
+       tempfile.mkstemp(prefix="loya_elev_") in the shared temp directory, then
+       executed with runas. Between write and execute another process could
+       swap the file. Write it into a per-run directory with restrictive
+       permissions, or verify a hash immediately before execution.
+
+BUG-8  snipIterPlaceholders treats shell expansion as a placeholder.
+       UI/js/pages/snippets.js matches the {HOME} inside ${HOME}, so
+       snipResolveCommand would SUBSTITUTE a shell variable if a target key of
+       the same name existed - silently rewriting a valid command. S07 works
+       around it for risk detection only, by skipping any brace preceded by $.
+       The resolver itself is untouched because changing substitution behaviour
+       is not a terminal change. Fix it where placeholders are resolved, and
+       cover it in the S29 test suite.
+
+BUG-6  RESOLVED in S29 - the README referenced a tests/ directory that was not
+       in the repo. The cause was .gitignore line 26, which listed tests/ under
+       "Test/cache/tooling" beside .pytest_cache/ and .mypy_cache/ - test source
+       lumped in with caches, so the suite could never be committed. That line
+       is removed; __pycache__/ on line 2 still covers the compiled artefacts.
+       A suite now exists and the README documents how to run it.
+
+BUG-7  Elevated sessions cannot resize and never report it.
+       ElevatedSession.resize() returns False unconditionally and the UI gives
+       no feedback.
+
+
+================================================================================
+3. THE SMALL FIX REQUESTED FIRST - AI TOGGLE BUTTON IN THE BOTTOM NAV
+================================================================================
+
+THE PROBLEM
+  The AI button sits between the two nav groups:
+    UI/windows/main.html - <button id="aiToggleBtn" class="ai-toggle-btn">
+    between <div id="bottomNavLeft"> and <div id="bottomNavRight">
+
+  UI/css/ai.css line 46 gives it margin:0 8px.
+  UI/css/ai.css line 50 changes that to margin:0 28px when the panel is open:
+    .bottom-nav-row.ai-open .ai-toggle-btn{margin:0 28px}
+
+  That adds 40 px of width to a row whose container is hard-capped:
+    UI/css/layout.css - .bottom-nav.expanded{max-height:90px;max-width:600px}
+
+  Six .nav-btn at 78 px + gaps + padding already nearly fills 600 px, so the
+  extra 40 px pushes the Dashboard/Notes/Commands group hard left and the
+  Targets/Snippets/Settings group hard right, and the buttons get squeezed
+  against the panel edges with no breathing room. That is exactly the reported
+  symptom.
+
+  Separately the button is small: 34x34 px with a 16x16 px icon, while every
+  nav button next to it is 78x50 px.
+
+THE FIX
+  a. Delete or heavily reduce the .ai-open margin jump. The button does not
+     need to move at all when the panel opens - the .active ring already
+     signals state. If some movement is wanted, cap it at margin:0 14px.
+  b. Raise .bottom-nav.expanded max-width from 600px to about 680px so the row
+     has real slack in both states, and keep the two nav groups from being
+     pushed into the container edges.
+  c. Grow the button: 34x34 -> 42x42, icon 16x16 -> 20x20, so it reads as a
+     peer of the nav buttons instead of an afterthought.
+  d. Optional polish: a soft accent glow on .active instead of only a ring, and
+     a subtle scale on hover consistent with .nav-btn:hover translateY(-2px).
+
+FILES TOUCHED
+  UI/css/ai.css      .ai-toggle-btn, .ai-toggle-btn .icon, .bottom-nav-row.ai-open
+  UI/css/layout.css  .bottom-nav.expanded
+  No JS or HTML change required. Keep every rule on one line.
+
+
+================================================================================
+4. PRIORITY FEATURE A - CLICK A SNIPPET AND RUN IT IN THE TERMINAL
+================================================================================
+
+TODAY
+  UI/js/pages/snippets.js line 171-172: a row click and a double click both
+  call snipCopy(resolved). Running is only available from the right-click menu
+  (line 151) and executes immediately with no confirmation.
+  UI/js/pages/commands.js line 35: a row click opens the info panel; a dedicated
+  .cmds-run-btn runs immediately.
+
+4.1 CONFIGURABLE DEFAULT CLICK ACTION
+  New setting: snippet_click_action, with four values.
+    copy            copy the resolved command (current behaviour, default)
+    run             send to the terminal and execute
+    insert          put the text in the terminal input, focused, NOT executed
+    ask             show a small chooser popover at the cursor every time
+  Same setting concept for the Commands page, stored separately so the two
+  pages can behave differently.
+
+4.2 CONFIRMATION POLICY
+  New setting: snippet_run_confirm, with three values.
+    always     confirm every run
+    never      never confirm
+    risky      confirm only when the command trips a risk rule (recommended
+               default)
+  Risk rules, evaluated in order:
+    - The command's noise_level is "destructive". The Commands schema already
+      carries noise_level with a "destructive" value and
+      UI/js/pages/commands.js already renders a badge for it - reuse it, do not
+      invent a parallel system.
+    - The resolved text still contains unresolved {PLACEHOLDER} tokens.
+    - The text matches a destructive pattern list: rm -rf, dd, mkfs, shutdown,
+      reboot, format, del /f /s /q, Remove-Item -Recurse -Force, chmod 777,
+      :(){ :|:& };:, curl|sh, iwr|iex, and similar.
+    - The command requests elevation: sudo, doas, runas, Start-Process -Verb
+      RunAs.
+    - The target session is an Elevated session.
+  The confirm dialog must show the fully resolved text in a monospace block,
+  name the destination session, and state the reason it is asking. Reuse
+  appConfirm() from UI/js/components/confirm-dialog.js, extended to accept an
+  HTML body instead of only a plain message.
+
+4.3 UNRESOLVED PLACEHOLDER GUARD
+  If the resolved command still has {TOKEN} spans, do not silently run it.
+  Offer an inline fill-in form listing each unresolved key with a text input,
+  pre-filled from the live target map where possible, then run. Placeholder
+  iteration already exists as snipIterPlaceholders() in snippets.js - reuse it.
+
+4.4 DESTINATION CHOICE
+  New setting: snippet_run_destination.
+    active      the currently focused terminal tab (default)
+    new         always open a new tab for the run
+    pick        show a session picker when more than one tab is open
+  If the terminal extension is disabled, the run action must offer to enable
+  it rather than failing with a bare error string. termEnsureActiveSession()
+  currently rejects with "Enable the Terminal extension in Settings first."
+
+4.5 MODIFIER SHORTCUTS ON THE ROW
+  Plain click        the configured default action
+  Ctrl + click       the opposite action (copy <-> run)
+  Shift + click      insert without running
+  Middle click       run in a brand new tab
+  Alt + click        copy the RAW command, placeholders unresolved
+  Document all of these in APP_SHORTCUTS in UI/js/components/shortcuts.js.
+
+4.6 A VISIBLE RUN BUTTON IN THE SNIPPETS TABLE
+  The Commands page has .cmds-run-btn; the Snippets table has no equivalent, so
+  running is invisible to a new user. Add a run button cell to the snippets row,
+  matching the existing fav-toggle cell pattern.
+
+4.7 CANCEL WINDOW INSTEAD OF A MODAL
+  A lighter alternative to a dialog for the "risky" tier: send the command but
+  show a status island countdown - "Running nmap ... in 3s - Cancel". Uses the
+  existing showStatusIsland() component. Good for flow; keep the modal for
+  genuinely destructive commands.
+
+4.8 RUN HISTORY
+  Every run from a snippet or command row should already be recorded through
+  bridgeCall("commands.record_run",...) into the CommandRuns table. Extend the
+  same call to runs typed directly into the terminal so the dashboard's recent
+  activity card is complete.
+
+
+================================================================================
+5. PRIORITY FEATURE B - MULTIPLE JOBS, TRACKED AND NAVIGABLE
+================================================================================
+
+This is the largest change in the document. It introduces a concept the app
+does not have today.
+
+5.1 THE JOB MODEL
+  A Job is one command execution inside one session.
+    id              short unique id
+    session_id      owning terminal session
+    label           short display name, defaults to the first token
+    command         the exact text sent
+    source          "terminal" | "snippet" | "command" | "playbook" | "ai"
+    state           queued | running | done | failed | killed | orphaned
+    started_at      ISO timestamp
+    ended_at        ISO timestamp or null
+    exit_code       integer or null
+    start_idx       offset into the session buffer where output begins
+    end_idx         offset where output ends
+    bytes_out       size of captured output
+  Jobs live in a registry in terminal_service.py and are also written to the
+  database so history survives a restart. The CommandRuns table already exists
+  and is the natural home; add the missing columns through the existing
+  migration mechanism in Cores/common_db.py - bump DB_SCHEMA_VERSION and add an
+  "if ver<11:" block. Never edit an older migration block.
+
+5.2 KNOWING WHEN A JOB ENDS AND WHAT IT RETURNED
+  The current code guesses completion with a heuristic: termCheckPendingCapture
+  waits for three poll ticks with no new bytes. That is unreliable for slow
+  scans and wrong for interactive prompts.
+  Replace it with a sentinel marker. After each submitted command, append a
+  shell-specific epilogue that prints a unique token plus the exit status:
+    cmd.exe      & echo LOYAJOB:<id>:%ERRORLEVEL%
+    powershell   ; Write-Output "LOYAJOB:<id>:$LASTEXITCODE"
+    pwsh         same as powershell
+    posix        ; printf 'LOYAJOB:%s:%s\n' <id> "$?"
+  The reader strips the marker line out of the visible buffer, closes the job,
+  records exit_code, and stamps end_idx. This is the standard shell-integration
+  technique and it is what makes every other job feature possible.
+  Guard against a command that never returns - a job with no marker after a
+  configurable timeout moves to state "orphaned" rather than hanging forever.
+
+5.3 CONCURRENCY MODELS
+  Two different things are worth supporting and they should not be confused.
+    Parallel sessions   several tabs, each with its own shell, each running its
+                        own job. This already half-works and just needs job
+                        tracking layered on.
+    Background jobs     several commands dispatched at once from one place,
+                        each transparently getting its own session so they
+                        genuinely run in parallel.
+  A "Run in background" action creates a hidden session, runs one job, streams
+  output into the job's own buffer, and closes the session when the job ends.
+  The tab strip stays clean; the job appears only in the jobs drawer.
+
+5.4 THE JOBS DRAWER - UI
+  A collapsible panel inside the terminal, opened from a new header button and
+  from a badge on the titlebar terminal icon.
+  Each row shows:
+    state dot (colour coded), label, elapsed or duration, exit code chip,
+    source icon, session name, and a kill / dismiss button.
+  Row interactions:
+    click            jump to the owning session and scroll to job.start_idx
+    double click     open the job output isolated in its own read-only view
+    right click      context menu: Re-run, Re-run in new tab, Copy command,
+                     Copy output, Save output as Note, Kill, Dismiss
+  Group and filter by state, by session, and by source.
+  Sort by start time, duration, or exit code.
+
+5.5 NAVIGATING BETWEEN JOBS
+  - Jump-to-job scrolls the output pane to the job's start offset and paints a
+    left accent bar down the job's output range.
+  - Prev/Next job buttons step through jobs in the active session.
+  - Each job's output block gets a header strip in the output pane showing the
+    command, the state, the duration and the exit code, and it is collapsible.
+    This turns a flat stream into readable blocks, which is the single biggest
+    readability win available.
+  - Ctrl+Up / Ctrl+Down jumps to the previous / next job boundary.
+
+5.6 KILLING AND CLOSING
+  Kill job          send SIGINT / Ctrl+C to the session, then escalate to
+                    SIGKILL or taskkill after a grace period
+  Kill all          every running job in every session
+  Close session     already exists; must now mark its jobs "killed" and warn
+                    when running jobs would be lost
+  Dismiss job       remove from the drawer without touching the process; only
+                    offered for finished jobs
+  Auto-dismiss      optional setting to clear finished jobs after N minutes
+  Closing the app with jobs running must warn. Cores/Bridge/api.py
+  WindowAPI._on_closing already calls _terminal_svc.close_all_sessions() with no
+  prompt - that silently kills running work today.
+
+5.7 NOTIFICATIONS AND AMBIENT STATUS
+  - Terminal titlebar icon carries a badge with the running job count.
+  - Status island message when a job finishes while its tab is not active.
+  - OS toast for long jobs, gated on the existing notification settings.
+    Cores/os_toast.py is already wired for this.
+  - Distinct sound-free visual for a non-zero exit code.
+  - A dashboard card showing running jobs and recent job outcomes, using the
+    existing card system in UI/js/components/card.js.
+
+5.8 FAN-OUT RUNS
+  Select several targets, or a target group, and run one command template
+  against each - one job per target, all in parallel, all in the drawer with
+  the target name as the label. This is the feature that makes the whole job
+  system worth building for a pentest workflow. Respect a configurable maximum
+  concurrency so a scan sweep does not exhaust the machine; queue the rest.
+
+5.9 PLAYBOOKS AS JOB CHAINS
+  Playbooks and PlaybookSteps tables already exist in the schema. Running a
+  playbook should create a sequential chain of jobs with a shared chain id,
+  stop-on-failure and continue-on-failure policies, and a progress row in the
+  drawer. This is a natural follow-on once 5.1 to 5.6 exist.
+
+
+================================================================================
+6. TERMINAL CORE LOGIC
+================================================================================
+
+6.1 REAL PTY ON WINDOWS (CONPTY)
+  The single largest quality gap. Windows currently uses pipes, which means no
+  colour from most tools, no resize, no interactive programs, no line editing.
+  Two options:
+    pywinpty     a pip dependency, added to Requirements.json, simple API
+    ctypes ConPTY  no new dependency, calls CreatePseudoConsole directly,
+                 more code to maintain
+  Given the project's "no online dependencies" stance for the UI layer and its
+  already-automated pip install for the backend, pywinpty is acceptable, but
+  the ctypes route keeps the install surface smaller. Decide before starting.
+  Once a real PTY exists, resize_session() works on Windows and the ANSI
+  handling below becomes worth extending.
+
+6.2 CHUNKED READS AND ADAPTIVE POLLING
+  Replace the one-byte read loop with 4096-byte chunked reads on both platforms.
+  Replace the fixed 200 ms poll with adaptive polling: 60 ms while output is
+  flowing, decaying to 500 ms when idle, and paused entirely when the panel is
+  closed. Better still, push output from Python to JS via window.evaluate_js so
+  the frontend stops polling at all; keep polling as a fallback.
+
+6.3 FULL ANSI HANDLING
+  Current support is SGR colour only; TERM_ANSI_OTHER_RE strips everything else,
+  so cursor movement, carriage-return progress bars, and clear-screen all
+  degrade into noise. Options in increasing cost:
+    a. Handle \r line rewrite and \x1b[2K erase-line so progress bars animate
+       in place instead of spamming lines.
+    b. Handle \x1b[H and \x1b[2J so "clear" actually clears.
+    c. Detect alt-screen (\x1b[?1049h) and switch to a fixed-grid renderer for
+       full-screen TUIs such as top and vim.
+  Item (a) alone fixes the most visible everyday annoyance.
+
+6.4 INPUT HANDLING
+  - Send \x03 for Ctrl+C (BUG-1), \x04 for Ctrl+D, \x1a for Ctrl+Z,
+    \x0c for Ctrl+L.
+  - Pass Tab through to the shell for completion instead of moving focus.
+  - Bracketed paste: wrap pasted text in \x1b[200~ ... \x1b[201~ so shells do
+    not execute a multi-line paste line by line.
+  - Multi-line paste guard: if pasted text contains newlines, show a preview
+    and ask before sending. This is a well known terminal safety issue and
+    matters more in a pentest tool than in a normal editor.
+  - Swap the single-line <input> for a growing textarea so multi-line editing
+    and here-docs are possible.
+  - Copy on select and right-click paste, matching normal terminal behaviour.
+
+6.5 SESSION AWARENESS
+  - Track and display the current working directory per session, in the tab and
+    in a status bar. Derivable from the same shell-integration marker used for
+    exit codes.
+  - Show the last exit code in the status bar with a red/green chip.
+  - Show session uptime and running job count.
+
+6.6 SHELL PROFILES
+  Today the shell picker is a flat list of detected shells. Add saved profiles:
+  name, shell, starting directory, environment variables, an optional startup
+  command, and a colour. Profiles are the thing that make "open a session for
+  engagement X" a one-click operation. Store them in settings.json under
+  extensions.terminal_profiles.
+
+6.7 SESSION RESTORE
+  Optionally reopen the previous tab layout on launch - same profiles, same
+  labels, empty buffers - so the workspace survives a restart.
+
+6.8 ENCODING
+  Force UTF-8 consistently. On Windows, run chcp 65001 in the session startup
+  or set the console output codepage on the PTY so box-drawing characters and
+  accented output stop turning into garbage.
+
+
+================================================================================
+7. UI / UX
+================================================================================
+
+7.1 PANEL LAYOUT MODES
+  Today the terminal is a fixed right-hand dock only.
+    - Bottom dock, full window width, height-resizable
+    - Left dock
+    - Floating detached window, reusing the existing mini-window plumbing in
+      Cores/Bridge/api.py create_mini_window()
+    - Maximize / fullscreen toggle for the panel
+    - Split view: two sessions side by side or stacked, each with its own input
+    - Remember the chosen mode in settings
+
+7.2 TAB MANAGEMENT
+    - Rename a tab (double click the label)
+    - Reorder tabs by drag
+    - Per-tab colour, auto-assigned per profile
+    - Middle click to close
+    - Ctrl+Tab / Ctrl+Shift+Tab to cycle, Ctrl+1..9 to jump
+    - Overflow menu when tabs exceed the strip width, instead of the current
+      horizontal scroll
+    - Duplicate tab (same profile, same cwd)
+    - Confirmation before closing a tab with a running job
+
+7.3 READING THE OUTPUT
+    - Search the scrollback: Ctrl+F, highlight all matches, next/prev, match
+      count, optional regex
+    - Filter mode: show only lines matching a pattern - hugely useful on noisy
+      scan output
+    - Fold long output blocks, and auto-fold anything over N lines
+    - Optional per-line timestamps
+    - Word wrap toggle
+    - Auto-scroll lock: stop following output when the user scrolls up, and
+      show a "jump to bottom" pill with a new-output count
+    - Font size +/- and a font family setting, persisted
+    - Selection-preserving rendering, which BUG-3's incremental renderer gives
+      for free
+
+7.4 THEMING
+    - A full 16-colour ANSI palette per theme (dark / light / royal) defined in
+      Cores/Theme/tokens.py rather than the hardcoded hex values currently in
+      UI/css/terminal.css. The royal theme in particular has no matching ANSI
+      set today.
+    - Optional panel opacity / blur control
+    - High-contrast mode
+
+7.5 STATUS BAR
+  A single compact strip at the bottom of the panel: shell name, cwd, last exit
+  code chip, running job count, session uptime, and a bell indicator.
+
+7.6 QUICK INSERT
+    - Ctrl+P inside the terminal opens a snippet search palette that inserts the
+      chosen command into the input, resolved, without running it
+    - Target placeholder chips: click to insert {IP}, {URL}, {DOMAIN} from the
+      active target
+    - Drag and drop a file onto the panel to insert its quoted path
+
+7.7 OUTPUT ACTIONS
+    - Copy last command, copy last output block, copy job output
+    - Export session as HTML with colours preserved, alongside the existing
+      .txt and Note export
+    - Send output block straight to a note, appending rather than creating
+
+7.8 EMPTY AND ERROR STATES
+  The panel currently opens straight into a shell. Add a proper empty state
+  with profile choices and recent sessions, and replace bare thrown strings
+  with actionable messages - notably the "Enable the Terminal extension"
+  rejection, which should offer a button that enables it.
+
+
+================================================================================
+8. PARSERS, IOCS AND SMART WIDGETS
+================================================================================
+
+8.1 EXTEND IOC DETECTION
+  Today: IPv4 and http(s) URLs only.
+  Add: IPv6, CIDR ranges, hostnames and FQDNs, email addresses, MAC addresses,
+  MD5/SHA1/SHA256 hashes, CVE identifiers, Windows and UNC paths, ports in
+  host:port form, base64 blobs over a length threshold, and private key headers.
+  Each type gets its own click action - save as target, copy, search the app,
+  or look it up in an existing note.
+
+8.2 BULK IOC ACTIONS
+  A "Extract IOCs" button that scans the whole session buffer, groups findings
+  by type with counts, and offers "save all as targets", "copy all", or "send
+  to a note as a table".
+
+8.3 MORE OUTPUT PARSERS
+  The ls/dir/Get-ChildItem table widget is a good pattern. Extend it to:
+    ps / tasklist / Get-Process   process table with a kill action
+    netstat / ss / Get-NetTCPConnection   connection table with port grouping
+    ip a / ifconfig / ipconfig    interface cards
+    nmap                          host and port table, feeding targets directly
+    dig / nslookup                record table
+    whoami /all, id               identity summary
+    JSON output                   collapsible JSON tree
+    CSV output                    sortable table
+  Every parser must degrade gracefully - if parsing fails, show raw text. The
+  existing "Show raw" toggle is the right pattern; keep it.
+
+8.4 PARSER SAFETY
+  Parsers currently run on a quiet-tick heuristic. Once jobs exist (5.2), run
+  each parser against a job's exact captured range instead, which removes the
+  guesswork and the risk of parsing two commands' output together.
+
+
+================================================================================
+9. INTEGRATION WITH THE REST OF THE APP
+================================================================================
+
+9.1 AI
+    - "Explain this output" and "Summarise this scan" actions on a job or a
+      selection, feeding the existing aiSendExternalPrompt() path used by the
+      notes Summarize button
+    - "Suggest the next command" from the current session context
+    - Error triage: when a job exits non-zero, offer a one-click explanation
+    - AI-proposed commands must land in the input as a staged suggestion that
+      the user explicitly runs; never auto-execute
+
+9.2 AI TOOL ACCESS VIA MCP
+  Cores/Bridge/mcp_server.py exposes Notes, Commands and Targets as MCP tools,
+  each gated by _ai_svc.tool_allowed(). Terminal tools could follow the same
+  pattern: terminal_list_sessions, terminal_run, terminal_read, terminal_kill.
+  Because this hands an LLM a shell, it must be off by default, listed
+  separately in the AI Roles UI with an explicit warning, and every AI-initiated
+  command must be logged to the audit log and shown in the jobs drawer with an
+  "ai" source badge. Consider requiring per-command approval as a third
+  permission tier beyond on/off.
+
+9.3 NOTES
+    - Append a job's command and output to a chosen note, not only "save as new
+      note"
+    - Auto-transcript mode: everything in a session streams into an engagement
+      note as it happens
+    - Insert a runnable command block into a note directly from terminal history
+
+9.4 TARGETS
+    - Auto-resolve {PLACEHOLDER} tokens against the active target when text is
+      sent to the terminal
+    - An active-target chip in the terminal status bar, click to switch
+    - Discovered hosts from parsed output offered as new targets in bulk
+
+9.5 DASHBOARD
+    - Running jobs card, recent jobs card, top commands card
+    - Cards come from the existing dashboard widget system, so this is small
+      once the job registry exists
+
+9.6 COMMAND PALETTE
+  Add terminal verbs to the Ctrl+K palette: new session, run last command,
+  kill all jobs, open jobs drawer, switch session.
+
+
+================================================================================
+10. SECURITY AND AUDIT
+================================================================================
+
+10.1 Fix BUG-4 and BUG-5 - the elevated session handshake and helper file.
+     These are the two genuine security defects in the current implementation
+     and should be treated as higher priority than any feature in this document.
+
+10.2 Audit every executed command through the existing
+     security_service.log_audit_event(), including the source (typed, snippet,
+     playbook, ai), the session, and the exit code. The audit viewer already
+     exists.
+
+10.3 Secret redaction before any transcript leaves the terminal - saving to a
+     note, exporting, or sending to an AI provider. Redact common patterns:
+     Authorization headers, API keys, -p/--password arguments, private key
+     blocks, and connection strings. Show what was redacted.
+
+10.4 Lock screen integration: when the app locks, blank the terminal output and
+     require the PIN before revealing it again. Buffers currently stay in the
+     DOM behind the lock overlay.
+
+10.5 Encrypted transcripts: when encryption at rest is enabled, session
+     transcripts saved to disk should follow the same protection as the
+     database.
+
+10.6 A per-profile "confirm every command" mode for elevated or production
+     sessions.
+
+10.7 Never log the contents of a command flagged as containing a secret.
+
+
+================================================================================
+11. PERFORMANCE
+================================================================================
+
+11.1 Incremental rendering - append only the new delta, keep an ANSI parser
+     state machine across chunks instead of re-parsing the whole buffer.
+11.2 Virtualised scrollback - render only the visible window plus a margin;
+     raise the scrollback cap well above the current 200 000 characters once
+     rendering no longer costs O(buffer).
+11.3 Batch DOM writes with requestAnimationFrame rather than writing on every
+     poll tick.
+11.4 Event delegation - attach one listener to the output container instead of
+     re-attaching listeners to every IOC span and widget on every render.
+11.5 Cap per-job captured output with a spill-to-disk path for very large
+     outputs, so a full port scan does not sit entirely in memory.
+11.6 Debounce resize so dragging the panel edge does not fire an ioctl per
+     pixel.
+
+
+================================================================================
+12. CROSS-PLATFORM
+================================================================================
+
+12.1 Windows: ConPTY (6.1) unlocks resize, colour and TUIs. Shipped in S18
+     behind a setting that defaults to off, with an automatic fallback to the
+     pipe backend if the pseudoconsole session does not survive. See the S18
+     entry for what was verified and what still needs a real desktop to confirm.
+12.2 Linux: verify on real hardware - the README states Linux has been
+     unit-tested but never confirmed on real hardware.
+12.3 Linux elevation currently refuses when only sudo is available. Offer an
+     in-terminal sudo prompt flow instead of a dead end. DONE in S30b - this
+     needed the TIOCSCTTY fix first, because without a controlling terminal sudo
+     cannot prompt for a password at all.
+12.4 macOS is entirely unsupported today. If it is ever a target, the POSIX PTY
+     path already covers most of it; the gaps are elevation and the toast layer.
+12.5 WSL detection on Windows - DONE in S14. wsl.exe -l -q is parsed (handling
+     its UTF-16 output) and each distribution is offered as a shell. Verified on
+     this machine: kali-linux was detected. This is also the cheapest route to
+     the S30a WSL test pass.
+
+12.6 USING WSL FOR LINUX DEV TESTING - WHAT IT DOES AND DOES NOT PROVE
+  WSL2 runs a real Linux kernel, so a large part of the Linux code path can be
+  exercised on the Windows dev machine without a VM. Use it as the routine dev
+  loop, but do not treat a WSL pass as a Linux pass.
+
+  COVERED BY WSL - real kernel behaviour, trustworthy results
+    pty.openpty(), the TIOCSWINSZ resize ioctl, os.setsid(), os.killpg with
+    SIGTERM - the entire POSIX branch of terminal_service.py
+    /proc/<pid>/exe and /proc/<pid>/cmdline in RunNote.py _unix_process_info
+    .venv_linux creation, bin/python3, bin/pip3, pywebview[gtk] install
+    LF line endings, POSIX path handling, case-sensitive filesystem behaviour
+    The whole Services layer - DB migrations, notes, commands, targets, search
+    _check_linux_webview_runtime once python3-gi and gir1.2-webkit2-4.1 are
+    installed
+    With WSLg on Windows 11, the app window actually renders, so the UI can be
+    clicked through
+
+  NOT COVERED - and worse, WSL will silently PASS several of these
+    _work_area_for_window in Cores/Bridge/api.py. WSLg has no taskbar or panel,
+    so both the GDK get_workarea() call and the xprop _NET_WORKAREA fallback
+    return the full screen. Maximize-to-work-area looks correct in WSL and
+    covers the taskbar on a real desktop. This is the single most misleading
+    gap.
+    Multi-monitor logic. WSLg presents one virtual screen, so _screen_for_window
+    and the geometry restore in _on_screen are never exercised.
+    pkexec elevation. Stock WSL has no polkit daemon and no authentication
+    agent, so elevation_available() and the pkexec branch of launch_elevated()
+    cannot be tested at all. This is exactly item 12.3.
+    notify-send. WSLg has no notification daemon. Note the asymmetry in
+    Cores/os_toast.py: available() only runs "which notify-send", so with
+    libnotify-bin installed it returns True while _send_linux() fails. WSL will
+    report the notification feature as working when it is not.
+    Frameless window drag and resize. Behaviour depends on the window manager;
+    Weston under WSLg does not match Mutter or KWin.
+    HiDPI and display scaling.
+
+  MANDATORY SETUP NOTE
+    Do not run the app from /mnt/d/... under WSL. _abs("Data") resolves relative
+    to the script, so a WSL run against the Windows working copy would share the
+    same Data/ folder - the same SQLite database, the same settings.json and the
+    same loya.pid - as the Windows install. The already-running check would then
+    read a Windows PID from the Linux side and misbehave, and both builds would
+    write the same database. Copy the project into the WSL filesystem (~/) for
+    testing. It is also far faster than the 9p mount.
+    The .venv_linux and .venv_windows directories are named differently and can
+    coexist safely; Data/ is the shared-state hazard, not the venv.
+
+  RECOMMENDED SPLIT
+    WSL           routine, run often, covers logic and the PTY layer
+    Real VM       Kali or Ubuntu in Hyper-V or VirtualBox, run before a release.
+                  Cheap to set up and doubly appropriate here since Kali is the
+                  target audience's desktop. Covers window geometry, polkit
+                  elevation, notifications and window-manager behaviour.
+    Bare metal    only if a VM shows graphics-driver-specific problems.
+
+
+================================================================================
+13. TESTING
+================================================================================
+
+13.1 Restore or create tests/ (BUG-6).
+13.2 Pure-logic units worth covering without a GUI:
+       ANSI parser output for known escape sequences
+       IOC regex matching and overlap resolution
+       ls / dir / PowerShell listing parsers against fixture text
+       job marker parsing and exit-code extraction
+       risk-rule classification for the confirmation policy
+       settings read/write round-trips
+13.3 A fake session object so job lifecycle can be tested with no real shell.
+
+
+================================================================================
+14. NEW ICONS NEEDED
+================================================================================
+
+Save free SVGs locally into Assets/icons/ and register each one as a one-line
+mask rule in UI/css/components.css. No CDN, no inline SVG, no emoji.
+
+  play.svg          ADDED in S10 - re-run a job
+  clock.svg         ADDED in S10 - duration / timestamps
+  refresh.svg       ADDED in S10 - refresh the jobs list
+  trash.svg         ADDED in S10 - dismiss finished jobs
+  pause.svg         pause or suspend
+  kill.svg          not needed - stop.svg covers interrupt
+  jobs.svg          not needed - list.svg covers the drawer toggle
+  filter.svg        filter output
+  split.svg         split view
+  dock-bottom.svg   layout mode
+  chevron-down.svg  fold / unfold blocks
+  terminal.svg      distinct from command-line.svg if profiles need it
+  shield.svg        elevated session indicator
+  trash.svg         dismiss job
+  download.svg      export
+
+Already present and reusable: add, close, copy, save, list, search, stop,
+folder, file, link, target, command-line, expand, fullscreen, shrink, grip,
+dots-vertical, arrow-up, arrow-down, info, bell.
+
+
+================================================================================
+15. NEW SETTINGS KEYS
+================================================================================
+
+All under extensions in Data/settings.json, written through
+terminal_service.py's existing _read_settings / _write_settings pair.
+
+  terminal_enabled              exists
+  terminal_width                exists
+  terminal_dock                 right | bottom | left | float
+  terminal_font_size            integer
+  terminal_font_family          string
+  terminal_scrollback           integer
+  terminal_word_wrap            bool
+  terminal_timestamps           bool
+  terminal_profiles             list of profile objects
+  terminal_restore_sessions     bool
+  terminal_max_concurrent_jobs  integer
+  terminal_job_autodismiss_min  integer, 0 disables
+  terminal_notify_on_finish     bool
+  terminal_confirm_multiline_paste  bool
+  snippet_click_action          copy | run | insert | ask
+  snippet_run_confirm           always | never | risky
+  snippet_run_destination       active | new | pick
+  command_click_action          same values, separate page
+  command_run_confirm           same values, separate page
+
+Every new key needs a control in UI/js/pages/settings.js and
+UI/pages/settings.html under the Extensions section, following the existing
+setTermToggle pattern.
+
+
+================================================================================
+16. NEW BRIDGE API SURFACE
+================================================================================
+
+Added to TerminalAPI in Cores/Bridge/api.py, delegating to terminal_service.py.
+Keep api.py thin - logic belongs in the service module.
+
+  terminal.jobs_list(session_id=None)
+  terminal.job_get(job_id)
+  terminal.job_run(session_id,text,meta)
+  terminal.job_run_background(profile_id,text,meta)
+  terminal.job_kill(job_id)
+  terminal.job_dismiss(job_id)
+  terminal.jobs_kill_all()
+  terminal.job_output(job_id)
+  terminal.profiles_list()
+  terminal.profile_save(profile)
+  terminal.profile_delete(profile_id)
+  terminal.set_dock(mode)
+  terminal.set_font(size,family)
+  terminal.export_html(session_id)
+  terminal.extract_iocs(session_id)
+  terminal.cwd(session_id)
+
+
+================================================================================
+17. IMPLEMENTATION SESSIONS
+================================================================================
+
+Each session is scoped to be finished by one AI session without hitting a token
+limit: a small file set, a clear boundary, and a working app at the end. Do them
+roughly in order - later sessions depend on earlier ones. Dependencies are
+listed explicitly.
+
+--------------------------------------------------------------------------------
+S01  AI toggle button and bottom nav spacing
+     Scope: section 3
+     Files: UI/css/ai.css, UI/css/layout.css
+     Depends on: nothing
+     Size: very small
+
+S02  Terminal input correctness
+     Scope: BUG-1, 6.4 control keys, Tab pass-through, multi-line paste guard,
+            textarea input
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/windows/main.html, UI/js/components/shortcuts.js,
+            UI/js/components/confirm-dialog.js, UI/css/components.css,
+            Cores/Services/terminal_service.py
+     Depends on: nothing
+     Size: small
+     Bracketed paste was deliberately NOT implemented. The terminal input is a
+     staged line editor - pasted text lands in a hidden textarea and is only
+     sent when the user presses Enter - so a paste can never self-execute the
+     way it can in a raw terminal. Wrapping sends in \x1b[200~ ... \x1b[201~
+     would print literal "[200~" in any shell that has not enabled DECSET 2004,
+     which is a real regression for a protection the staging model already
+     provides. Revisit only if the input ever becomes a direct pass-through.
+
+S03  Backend read performance and adaptive polling
+     Scope: BUG-2, 6.2
+     Files: Cores/Services/terminal_service.py, UI/js/components/terminal.js
+     Depends on: nothing
+     Size: small
+
+S04  Incremental output rendering
+     Scope: BUG-3, 11.1, 11.3, 11.4, plus auto-scroll lock from 7.3
+     Files: UI/js/components/terminal.js, UI/css/terminal.css
+     Depends on: S03
+     Size: medium - this is a rewrite of the render path, keep it isolated
+
+S05  Elevated session hardening
+     Scope: BUG-4, BUG-5, 10.1
+     Files: Cores/Services/terminal_service.py
+     Depends on: nothing
+     Size: small - highest security priority, can be done at any point
+
+S06  Run-action settings and the settings UI
+     Scope: 4.1, 4.2, 4.4 settings storage, section 15 keys for snippets and
+            commands
+     Files: Cores/Services/terminal_service.py, Cores/Bridge/api.py,
+            UI/pages/settings.html, UI/js/pages/settings.js,
+            UI/css/pages/settings.css
+     Depends on: nothing
+     Size: medium
+
+S07  Run from snippets and commands, with confirmation
+     Scope: 4.1 to 4.7 behaviour, risk rules, placeholder guard, modifiers,
+            snippets run button
+     Files: UI/js/pages/snippets.js, UI/js/pages/commands.js,
+            UI/js/components/confirm-dialog.js, UI/js/components/terminal.js,
+            UI/css/pages/snippets.css, UI/js/components/shortcuts.js
+     Depends on: S06
+     Size: medium
+
+S08  Shell integration markers and exit codes
+     Scope: 5.2, 6.5 cwd and last exit code
+     Files: Cores/Services/terminal_service.py, UI/js/components/terminal.js
+     Depends on: S03, S04
+     Size: medium - the keystone for everything in section 5
+
+S09  Job registry backend
+     Scope: 5.1, 5.3, 5.6 kill logic, DB migration to schema 11
+     Files: Cores/Services/terminal_service.py, Cores/common_db.py,
+            Cores/Bridge/api.py
+     Depends on: S08
+     Size: medium
+
+S10  Jobs drawer UI
+     Scope: 5.4, 5.5, 5.6 UI, 5.7 badges and status island
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/windows/main.html, Assets/icons/ additions,
+            UI/css/components.css
+     Depends on: S09
+     Size: medium to large - split into 10a drawer and 10b in-output job blocks
+           if it runs long
+
+S11  Job output blocks and navigation
+     Scope: 5.5 output block headers, folding, prev/next job, parser retarget
+            from 8.4
+     Files: UI/js/components/terminal.js, UI/css/terminal.css
+     Depends on: S10
+     Size: medium
+
+S12  Fan-out runs and concurrency limits
+     Scope: 5.3 background sessions, 5.8, max-concurrency queue
+     Files: Cores/Services/terminal_service.py, UI/js/components/terminal.js,
+            UI/js/pages/targets.js
+     Depends on: S09, S10
+     Size: medium
+
+S13  Tab and session management
+     Scope: 7.2 in full, 6.7 session restore
+     Files: UI/js/components/terminal.js, UI/css/terminal.css
+     Depends on: S04
+     Size: medium
+
+S14  Shell profiles
+     Scope: 6.6, 7.8 empty state, 12.5 WSL detection
+     Files: Cores/Services/terminal_service.py, Cores/Bridge/api.py,
+            UI/js/components/terminal.js, UI/pages/settings.html,
+            UI/js/pages/settings.js
+     Depends on: S06, S13
+     Size: medium
+
+S15  Scrollback search, filter and status bar
+     Scope: 7.3 search and filter, 7.5 status bar, 7.3 font size and wrap
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/windows/main.html
+     Depends on: S04
+     Size: medium
+
+S16  Panel layout modes - DOCK MODES AND MAXIMIZE SHIPPED
+     Scope: 7.1 dock modes, maximize
+     Files: UI/css/terminal.css, UI/css/layout.css,
+            UI/js/components/terminal.js, UI/js/components/side-panel-resize.js,
+            UI/windows/main.html, Cores/Services/terminal_service.py,
+            Cores/Bridge/api.py
+     Depends on: S04
+
+     #content and #terminalPanel now sit inside a #workArea flex box, so the dock
+     mode is one class on a single element: nothing for right, dock-left flips it
+     to row-reverse, dock-bottom flips it to column. The AI panel stays outside
+     that box so it is unaffected by the terminal dock.
+
+     Maximize deliberately does NOT hide #content. It absolutely positions the
+     panel over the work area instead. #content is where modal.js mounts its
+     backdrop (position:absolute inset:0 against #content), so hiding or
+     zero-sizing it would silently break every dialog opened from the terminal -
+     fan-out, IOC, run confirmation. Overlaying keeps content full size, and the
+     backdrop still paints above the panel because #content is z-index:auto and
+     therefore does not create a stacking context.
+
+     initSidePanelResize grew an axis. It takes an optional config() callback
+     resolved at mousedown, so the same handle drags horizontally when docked
+     left or right and vertically when docked bottom, with per-mode min and max.
+     ai.js passes no config and keeps the old behaviour through the fallback.
+
+     Width and height persist separately, so switching dock modes back and forth
+     does not lose either size. Mode, width, height and maximized all round trip
+     through terminal.set_panel_layout, which merges partial updates.
+
+     Entry points: the layout button in the panel head opens a dock menu with a
+     tick on the active mode, the maximize button toggles, and Ctrl+Shift+Enter
+     toggles from the terminal input.
+
+S16b Split view and floating terminal window - SPLIT VIEW SHIPPED, FLOATING WINDOW NOT
+     Scope: 7.1 split view, floating detached window, plus named / saved /
+            reopenable sessions (asked for alongside the split)
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/windows/main.html, UI/js/components/shortcuts.js,
+            Cores/Services/terminal_service.py, Cores/Bridge/api.py
+            (TerminalAPI only), tests/js/run.js,
+            tests/test_terminal_saved_sessions.py
+     Depends on: S16
+
+     SPLIT VIEW
+     #terminalOutput is no longer a fixed element. The panel holds
+     #terminalPanes, and each pane is an object {el, out, jump, sessionId,
+     renderedTabId, followOutput, pendingOutput} with its own output element.
+     Layouts are data: termPaneRects(layout, ratios) returns pane rectangles as
+     fractions plus the splitter bars, and the panes are absolutely placed from
+     that, so adding a layout is one switch case. Shipped: single, cols2 (side by
+     side), rows2 (stacked), top1bottom2 (the user's example), left2right1, grid4.
+
+     The render pipeline was threaded through rather than duplicated: the
+     incremental/full renderers already took a nodes object, so termRenderPane
+     resolves the pane's own committed/tail nodes (classes, not ids) and keeps
+     "which tab did this pane last render" on the pane. Render state that is
+     per session (renderedLen, ansiClasses, renderVersion) stays on the tab,
+     which is safe because a session is on screen in at most one pane - picking
+     a session that another pane shows swaps the two. termState.followOutput and
+     pendingOutput are accessors onto the focused pane, so every older caller
+     still works. The focused pane's output keeps the historic ids
+     (#terminalOutput, #terminalJumpBottom), so external selectors still find
+     "the terminal the user is looking at".
+
+     Search, the live echo, the blinking cursor and the suggestions popup belong
+     to the focused pane only; another pane renders through termWithoutSearch so
+     the active session's match offsets are never applied to a different
+     buffer. Each pane's ResizeObserver feeds the existing debounced size sync,
+     which now resizes each visible session to its own pane grid (cols/rows are
+     kept per tab, so an unchanged pane never calls the bridge). Verified live:
+     stty size equals the pane grid in all six layouts and after splitter drags.
+
+     Splitters clamp to keep 160 px / 80 px per pane, double-click evens out.
+     Focus: click a pane, Alt+Arrow (rebindable; Ctrl+Alt+Arrow is now reserved
+     because XFCE and GNOME switch workspaces with it), or drop a tab on a pane.
+     Each session keeps its own half-typed line when focus moves.
+
+     Persistence: layout, ratios, focused pane and per pane {name, shell,
+     profile, cwd} go to Data/terminal_sessions.json (workspace). The first
+     panel open of a run starts fresh shells in those folders with those names.
+     Elevated panes are never restored.
+
+     POLLING
+     One bridge call per tick (terminal.poll) instead of one read plus one alive
+     call per session. Sessions on screen, and any session with a job in flight,
+     are read every tick; sessions that are only tabs about once a second.
+     Idle WebKitWebProcess CPU on the Kali VM (Xvfb, 20 s samples): panel closed
+     1.2%, single pane 4.0%, three panes 4.3%, four panes 5.1%. top -d 1 costs
+     the same in a split as alone (33% vs 36%); that cost is the S19 redraw
+     path, not the split.
+
+     SESSIONS
+     Rename: double-click a tab or pane header, or the context menus. The tab
+     double click is detected by session id and time because the first click
+     re-renders the strip and WebKit then never fires dblclick; the edit box
+     also swallows Space keyup, which WebKit turned into a click on the
+     enclosing tab button. The name is pushed to the backend session (label) for
+     tools that list sessions.
+     Saved sessions: name, shell or profile, cwd (live /proc cwd on Linux,
+     shell-integration cwd otherwise), startup commands, optional output (64 KB,
+     plain text, secrets redacted). Open starts a NEW shell, the backend types
+     the startup lines with the shell's newline, and the saved output shows
+     greyed above a divider. Max 50.
+     Recently closed: last 10, newest first, 32 KB of output each (switchable
+     off, which also strips what is stored). Reopen / Ctrl+Shift+T pops the
+     entry and starts a fresh shell with the same name and folder; the UI says
+     plainly that the old process is gone. If the store cannot be written the
+     list still works in memory for the run.
+
+     ALSO FIXED ON THE WAY
+     .work-area.maximized .content{display:none} (125958a) hid every openModal
+     dialog opened while the panel was maximized - IOC, fan-out, job output and
+     the new Save session dialog - because modal.js mounts its backdrop inside
+     #content. Now only the pages are hidden.
+
+     NOT DONE
+     The floating detached window. It needs its own page, bridge init and
+     polling loop against the shared registry (see create_mini_window); the
+     session registry is process-wide so the backend is ready.
+     A session cannot be shown in two panes at once (by design: one pty, one
+     size). Reloading the page orphans the old shells until app exit, as before.
+
+S17  ANSI theming and full escape handling
+     Scope: 6.3a and 6.3b, 7.4 palette moved into tokens.py
+     Files: Cores/Theme/tokens.py, Cores/Theme/palettes.py,
+            UI/css/terminal.css, UI/js/components/terminal.js
+     Depends on: S04
+     Size: medium
+
+S18  ConPTY on Windows - SHIPPED BEHIND A FLAG, DEFAULT OFF
+     Scope: 6.1, 6.8 encoding, BUG-7 resize, 12.1
+     Files: Cores/Services/conpty.py, Cores/Services/terminal_service.py,
+            UI/pages/settings.html, UI/js/pages/settings.js
+     Depends on: S03
+
+     A ctypes ConPTY backend now exists and is wired into TerminalSession behind
+     the extensions.terminal_use_conpty setting, which defaults to false. When it
+     is on, a session tries the pseudoconsole first, waits 350 ms, and if the
+     child is not alive it closes it and starts an ordinary pipe session instead.
+     Turning the setting on therefore cannot break the terminal - the worst case
+     is the behaviour you already had, plus a third of a second at session start.
+     The toggle only appears when the platform reports ConPTY support.
+
+     VERIFIED CORRECT ON WINDOWS 11 BUILD 26200
+       CreatePseudoConsole returns S_OK and a valid HPCON
+       InitializeProcThreadAttributeList reports 48 bytes and succeeds
+       UpdateProcThreadAttribute with PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
+         (0x00020016) returns TRUE
+       CreateProcessW with EXTENDED_STARTUPINFO_PRESENT returns TRUE and a pid
+       ResizePseudoConsole returns S_OK at several sizes, which is the BUG-7 fix
+       Struct layout byte-exact on x64: STARTUPINFOW 104, STARTUPINFOEXW 112,
+         lpAttributeList at offset 104, PROCESS_INFORMATION 24, COORD 4
+       conhost emits its init, paint and title sequences into the pty, and the
+         title names the attached image, so attachment is real
+
+     WHAT COULD NOT BE REPRODUCED IN THE DEVELOPMENT SANDBOX
+       The child exits within 300 ms and only 16 bytes ever stream. Four
+       structural variants were tried and all behaved identically:
+         msvcrt fd handles versus raw ReadFile and WriteFile
+         bInheritHandles TRUE versus FALSE
+         closing the pty-side handles before versus after CreateProcessW
+       In the same sandbox an ordinary pipe-based cmd.exe stays alive and round
+       trips fine, and GetConsoleWindow returns 0 - the development shell has no
+       real console. Since every API call succeeds and conhost demonstrably
+       attaches, the most likely explanation is the sandbox rather than the code,
+       which is exactly why this ships opt-in with a fallback instead of on.
+
+     HOW TO FINISH IT
+       Run the app normally, turn the setting on, open a session and look at the
+       status bar. If it works you will be able to resize the panel and run a
+       full-screen tool such as top or vim. If it still falls back, the next
+       thing to try is pywinpty added to Requirements.json - the launcher already
+       installs dependencies, so the cost is one wheel.
+       Do NOT re-derive the struct definitions or the attribute constant. They
+       are verified and are the tedious part.
+
+S19  Alt-screen and full-screen TUI support
+     Scope: 6.3c
+     Files: UI/js/components/terminal.js, UI/css/terminal.css
+     Depends on: S17, S18
+     Size: large - optional, only worth it if interactive tools matter
+
+S20  IOC expansion and bulk actions
+     Scope: 8.1, 8.2
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/js/pages/targets.js
+     Depends on: S04
+     Size: medium
+
+S21  Output parsers expansion
+     Scope: 8.3, 8.4
+     Files: UI/js/components/terminal.js, UI/css/terminal.css
+     Depends on: S11, S20
+     Size: medium - add parsers in batches of two or three per pass
+
+S22  Notes and targets integration
+     Scope: 9.3, 9.4, 7.7 export actions
+     Files: UI/js/components/terminal.js, UI/js/pages/notes.js,
+            Cores/Bridge/api.py, Cores/Services/terminal_service.py
+     Depends on: S09
+     Size: medium
+
+S23  AI integration - SHIPPED
+     Scope: 9.1
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            UI/windows/main.html
+     Depends on: S11, S22
+
+     Four entry points, all going through the existing aiOpenPanel and
+     aiSendExternalPrompt path that the notes Summarize button already uses, so
+     there is no second AI transport to maintain.
+
+       Brain button in the panel head - explain the selection if there is one,
+         explain the last job block, summarise the session, suggest the next
+         command
+       Job context menu - explain this output, or, when the job failed or was
+         killed, ask why it failed
+       Why? pill on a failed job block in the scrollback, which triages that
+         block without needing the drawer
+       The session summary uses the same section structure as the notes
+         summary so the two read alike in an engagement note
+
+     EVERYTHING IS REDACTED BEFORE IT LEAVES
+     Terminal output goes to a third-party model, which is a worse exposure than
+     the local note-saving path where redaction is a checkbox. So here it is not
+     optional: every payload goes through terminal.redact first and the user is
+     told how many secrets were stripped. Only the last 12 000 characters are
+     sent, tail not head, because the interesting part of a scan is the end.
+
+     SUGGESTIONS ARE STAGED, NEVER RUN
+     9.1 requires that a proposed command lands in the input for the user to run
+     explicitly. termAiSuggestNext parses the reply and calls termStageCommand,
+     the same path as Type without running, so a suggestion cannot execute
+     itself even if the model is prompt-injected by hostile scan output.
+
+     The parser deliberately requires a fenced code block. An earlier version
+     fell back to the first line of an unfenced reply, which meant a chatty
+     model got its prose staged as a shell command. Refusing is better: the
+     status island says no command was proposed and the input is left alone.
+     Comment lines and $ or > prompt markers inside the fence are skipped.
+
+S24  AI terminal tools over MCP - SHIPPED, OFF BY DEFAULT
+     Scope: 9.2 including the permission tier and audit trail
+     Files: Cores/Bridge/mcp_server.py, Cores/Services/ai_service.py,
+            Cores/Services/terminal_service.py, Cores/Bridge/api.py,
+            UI/js/pages/settings.js, UI/pages/settings.html,
+            UI/css/pages/settings.css, UI/js/components/terminal.js
+     Depends on: S09, S23
+
+     Five tools: terminal_list_sessions, terminal_run, terminal_run_status,
+     terminal_read, terminal_kill. All gated by _ai_svc.tool_allowed() like the
+     existing note and command tools.
+
+     TERMINAL_RUN DOES NOT RUN ANYTHING
+     It queues a request and returns state "pending" with a request_id. A human
+     approves it in the app, and only then does it execute - as an ordinary
+     background job with source "ai", so it lands in the jobs drawer with the
+     brain badge and goes through audit_command like every other command. The
+     model polls terminal_run_status to find out what happened. The tool
+     description says all of this, so a model is not surprised by the wait.
+
+     THE PERMISSION DEFAULTS NEEDED A SEPARATE CODE PATH
+     _default_permissions() granted anything that was not a delete key, so
+     simply adding terminal keys to the map would have shipped them ON. There is
+     now an explicit _SHELL_PERMISSION_KEYS set that defaults to off regardless.
+
+     A SECOND, WORSE HOLE IN THE SAME AREA
+     select_all_permissions() granted everything except delete keys. Adding
+     terminal keys would have made the existing "Select All (except Delete)"
+     button hand an LLM a shell in one click, with a label that says nothing
+     about it. That call now excludes shell keys too. Deselect All still
+     includes them, because revoking is always safe. Both are regression tested.
+
+     THE THIRD TIER
+     Permission on/off is the first two. The third is the approval mode: ask,
+     the default, stops for every command; allow runs without asking EXCEPT for
+     commands matching a destructive pattern, which always stop. That exception
+     is enforced in terminal_service, not in the page, so a compromised or buggy
+     front end cannot bypass it. The pattern list is deliberately a second copy
+     rather than a reuse of the JS rules in terminal.js - those are for warning
+     the operator and live on the client, and a security gate must not depend on
+     the client.
+
+     TERMINAL_READ HAD TO STOP DRAINING
+     The first version called session.read(), which consumes the buffer. The AI
+     reading a session would have silently eaten output before the operator's
+     own panel polled for it. TerminalSession now keeps a bounded 64 KB tail
+     alongside the drain buffer, and the tool peeks at that instead. Output is
+     redacted before it is returned.
+
+     UI
+     Terminal permissions are rendered in their own box below the roles table,
+     outlined in the danger colour, with a shell-access pill and a warning that
+     names the real risk: scan output the model reads can itself contain
+     instructions aimed at the model. The approval mode sits in the same box.
+     Pending requests surface as a confirmation dialog showing the command, the
+     AI's stated reason and any destructive flag.
+
+     33 tests cover the defaults, the read gate, both bulk-permission paths, the
+     destructive detector, the queue lifecycle, that a denied request never
+     started a job, that a pending one never did either, that a request cannot
+     be resolved twice, that the internal job key is never handed to the model,
+     and that peeking does not consume.
+
+9.5 and 9.6 fold into S25.
+
+S25  Dashboard cards, command palette verbs and shortcuts
+     Scope: 9.5, 9.6, shortcuts sheet update
+     Files: Cores/Services/dashboard_service.py, UI/js/pages/dashboard.js,
+            UI/js/components/palette.js, UI/js/components/shortcuts.js
+     Depends on: S09
+     Size: small to medium
+
+S26  Playbooks as job chains - SHIPPED
+     Scope: 5.9
+     Files: Cores/common_db.py, Cores/Services/terminal_service.py,
+            Cores/Services/playbooks_service.py, Cores/Bridge/api.py,
+            UI/js/components/terminal.js, UI/js/components/confirm-dialog.js,
+            UI/js/pages/commands.js, UI/pages/commands.html,
+            UI/css/terminal.css
+     Depends on: S12
+
+     Run All on a playbook turns its steps into one sequential chain of jobs.
+     Every step is a normal row in the jobs drawer, grouped under a foldable
+     chain header with a progress bar, a settled-of-total count and a cancel
+     button while it is still running.
+
+     Schema: migration 12 adds chain_id and chain_pos to TerminalJobs plus an
+     index on the pair. DB_SCHEMA_VERSION is now 12.
+
+     Two new job states. Steps are inserted as pending up front so the whole
+     chain is visible before anything runs, and become skipped when the chain
+     stops early. That makes stop-on-failure legible after the fact - you can
+     see which steps never got their turn rather than just seeing them vanish.
+     Both states are excluded from clear_finished_jobs, and reap_running_jobs
+     now orphans pending steps too so a crash mid-chain cannot leave rows stuck.
+
+     Policies: stop halts at the first non-zero exit, continue runs every step
+     regardless. The confirmation dialog offers both as buttons rather than
+     burying the choice in settings, since it is a per-run decision. appConfirm
+     grew an optional extraLabel that resolves "extra" - existing callers are
+     unaffected because they never pass it.
+
+     Cancelling marks the chain, skips its pending steps and kills the running
+     one through the existing batch process registry, so a chain step and a
+     fan-out job are interrupted by the same code path.
+
+     Steps run as one-shot subprocesses like the fan-out runner, so exit codes
+     are authoritative rather than scraped from shell markers, and output is
+     captured per step and reachable from the drawer.
+
+     Note the session id prefix. Background jobs used to be identified by a
+     "batch:" prefix in three places - the session label, jump-to-job and
+     kill-job. Chain steps use "chain:", so those checks now go through one
+     termIsBackgroundJob helper. Adding a third background source means
+     extending that helper, not hunting for prefix comparisons.
+
+S27  Audit, redaction and lock integration
+     Scope: 10.2 to 10.7
+     Files: Cores/Services/security_service.py,
+            Cores/Services/terminal_service.py, UI/js/components/terminal.js,
+            UI/js/components/lock-screen.js
+     Depends on: S09
+     Size: medium
+
+S28  Scrollback cost, output spill and pty resize - SHIPPED
+     Scope: 11.2, 11.5, 11.6
+     Files: UI/js/components/terminal.js, UI/css/terminal.css,
+            Cores/Services/terminal_service.py, Cores/Bridge/api.py
+     Depends on: S04, S09
+
+     11.2 THE REAL COST WAS NOT THE RENDER, IT WAS THE TRIM
+     The scrollback cap trimmed to exactly 200 000 characters the moment the
+     buffer passed it, and the trim calls termInvalidateRender. So once a
+     session went past the cap, the very next poll tick overflowed it again and
+     forced a FULL re-render of the whole buffer - every tick, forever. S04 made
+     the append path incremental but this quietly bypassed it under exactly the
+     workload it was meant to help.
+
+     Fixed by trimming in blocks: let the buffer run to cap plus 64 KB of slack,
+     then cut back to the cap in one go. At steady state that is one full
+     re-render per 64 KB of output instead of one per tick. With rendering no
+     longer O(buffer) per tick the cap itself was doubled to 400 000, as 11.2
+     asked. Covered by a test that streams 2000 ticks and asserts the trim count
+     stays within one of the arithmetic minimum, plus tests that every index
+     into the buffer - listings, job history, pending capture, renderedLen - is
+     rebased by exactly the cut.
+
+     11.6 THERE WAS NOTHING TO DEBOUNCE, BECAUSE NOTHING CALLED RESIZE
+     terminal.resize was exposed on the bridge and TerminalSession.resize was
+     implemented and verified on Linux in S30a, but no JavaScript ever called
+     it. The pty sat at its default geometry no matter how wide the panel was,
+     so wrapped output and any full-screen tool laid out against the wrong size.
+     Now a ResizeObserver on the output element drives a debounced sync: measure
+     one character cell with a hidden probe span, divide the padded content box,
+     clamp, and only call the bridge when the whole-cell grid actually changes.
+     The debounce and the change check are separate guards - the observer fires
+     per frame while dragging, and most frames do not cross a cell boundary.
+
+     11.5 SPILL RATHER THAN DISCARD
+     Batch and chain output was capped at 512 KB in memory and the head was
+     thrown away, so a full port scan lost its own beginning. Output past the
+     threshold is now written to Data/job_output/<job>.txt while memory still
+     holds only the bounded tail. batch_output(job_key) keeps returning the tail
+     so the drawer stays cheap; the output viewer asks for the full text.
+     batch_output_info reports total, held and spilled for a UI that wants to
+     say so. Clearing a job or all jobs deletes the files.
+
+     Job keys are generated internally, but the spill path is built by stripping
+     everything outside [A-Za-z0-9_-] and capping the length rather than by
+     trusting that, so a key that ever became attacker-influenced cannot walk
+     out of the directory. Tested, including that a hostile key still round
+     trips to the right file.
+
+S29  Tests
+     Scope: section 13, plus fixing the README reference
+     Files: tests/ (new), README.md
+     Depends on: whatever exists at the time; can be run repeatedly
+     Size: medium
+
+S30a Linux verification under WSL - LOGIC AND PTY LAYER DONE, UI LAYER NOT
+     Scope: 12.6 covered list
+     Files: tests/test_posix_pty.py, tests/test_terminal_teardown.py,
+            Cores/Services/terminal_service.py, README.md
+     Depends on: S18 for parity comparison
+
+     Run on kali-linux under WSL2 with the distro's own python3. The whole
+     Python suite passes on both platforms: 97 tests, all 97 on Linux and 83 of
+     97 on Windows with 14 posix-only cases skipped.
+
+     The posix checks live in tests/test_posix_pty.py rather than a standalone
+     script, so they are skipIf-guarded on Windows and run automatically under
+     WSL with no separate runner to remember. Re-running after any change to the
+     POSIX branch is one command.
+
+     VERIFIED ON A REAL LINUX KERNEL
+       pty.openpty gives the session a real tty - proven by the input echo,
+         which a pipe would not produce
+       TIOCSWINSZ resize actually reaches the child - stty size inside the
+         session reports the new geometry, which is the Linux half of BUG-7
+       os.setsid puts the child in its own process group
+       Ctrl+C writes the raw ETX byte through the pty
+       one-shot chains report real exit codes and stop on the failing step
+       /proc based process probing in RunNote._unix_process_info
+       The whole Services layer, DB migrations included, on a case-sensitive
+         filesystem with LF endings
+
+     BUG FOUND AND FIXED - ZOMBIE PROCESSES ON LINUX
+       TerminalSession.close signalled the child and closed the master fd but
+       never reaped it, so every closed session left a zombie for the lifetime
+       of the app. Invisible on Windows, which has no zombie concept, so only a
+       real kernel could have surfaced it. close now hands off to a short-lived
+       reaper thread that waits, escalates to SIGKILL if the child ignores
+       SIGTERM, and waits again. The escalation also fixes a second latent
+       problem: a child that ignored SIGTERM previously survived forever.
+       Covered by tests/test_terminal_teardown.py, which asserts the reap on
+       both platforms and additionally asserts no zombie and no leaked master fd
+       on posix.
+
+     STILL NOT DONE - needs the GTK stack installed in the distro
+       .venv_linux creation and the pywebview[gtk] install
+       _check_linux_webview_runtime, which needs python3-gi and
+         gir1.2-webkit2-4.1
+       Click-through of the UI under WSLg
+     These are the UI layer rather than the terminal layer, so they gate S30b
+     rather than this session. All three were completed in S30b. Everything in 12.6 marked NOT COVERED still
+     stands - in particular the work-area maximize trap, which WSL will pass
+     while a real desktop fails.
+
+     Setup note from 12.6 was followed: the project was copied into the WSL
+     filesystem, never run from /mnt/d, so the two builds never shared Data/.
+
+S30b Linux verification on a real desktop - DONE, 11 BUGS FOUND AND FIXED
+     Scope: 12.2, 12.3, and the 12.6 not-covered list
+     Files: RunNote.py, Requirements.json, Cores/Bridge/api.py,
+            Cores/Services/terminal_service.py, Cores/os_toast.py,
+            UI/js/app.js, UI/js/components/titlebar.js,
+            UI/js/components/terminal.js, UI/css/terminal.css, UI/css/layout.css
+     Depends on: S30a
+
+     Run on Kali rolling, XFCE 4 on X11 with xfwm4, in a VMware VM: one 1920x1080
+     output, xfce4-panel docked top with a 35 px strut, scale factor 1.
+     Suites: 183 Python (system python3 and .venv_linux), 210 Node, all green.
+     WebKit2 resolves at 4.1 (WebKitGTK 2.52.5). Kali has no gir1.2-webkit2-4.0
+     package at all, so the 4.0 fallback in _check_linux_webview_runtime is dead
+     code on this distro.
+
+     THE 12.6 WORK-AREA TRAP WAS REAL
+       Maximize returned 0,0,1920,1080 instead of 0,35,1920,1045. xfwm4 clamped
+       the position to the panel strut but not the height, so the window ran to
+       y=1115 - 35 px of the app hung below the screen. Cause: pywebview's GTK
+       backend passes Gdk.Monitor.get_geometry() as Screen.frame while winforms
+       passes WorkingArea, so "frame or _linux_work_area(scr)" always short
+       circuited and the panel-aware branch was dead code on Linux. Reordered;
+       _linux_work_area returns None off Linux so Windows is byte-identical.
+
+     THE LAUNCHER COULD NOT BOOTSTRAP ON A STOCK KALI DESKTOP
+       pywebview[gtk] pins PyGObject==3.50.0 exactly. Kali ships 3.56.2, so pip
+       always built from source and died on "Dependency cairo not found". The
+       venv is now created with --system-site-packages, the gtk extra is dropped
+       so the distro's own PyGObject is used, and a venv lacking system site
+       packages is detected and recreated. Bootstrap now completes in ~3 s.
+
+     ELEVATION NOW USES THE IN-TERMINAL SUDO FLOW - THIS CLOSES 12.3
+       The pty child was started with preexec_fn=os.setsid and never issued the
+       TIOCSCTTY ioctl, so it had no controlling terminal and anything opening
+       /dev/tty failed - sudo reported "a terminal is required to read the
+       password". Fixed by acquiring the controlling terminal in the child.
+       elevation_available() now prefers sudo, launch_elevated wraps the chosen
+       shell in sudo, and the password prompt appears inside the panel. A refused
+       elevation exits non-zero, and the tab is removed with the reason shown as
+       a toast instead of being left behind dead. All three paths were driven
+       end to end through the UI: the prompt, three wrong passwords exiting 1,
+       and success - the elevated tab stays live on a root@kali prompt where
+       id -u reports 0 and files it creates are owned by root. The success path
+       needed a temporary NOPASSWD sudoers drop-in, since the harness has no
+       password; it was removed afterwards.
+
+     THE CLOSE BUTTON DEADLOCKED THE APP - TWO SEPARATE BUGS
+       1. The closing handler runs on the GTK main loop and called
+          save_window_geometry, which read window.x; pywebview marshals that back
+          onto the same loop and waits, so the app froze unclosable. Geometry is
+          now cached from the moved and resized events.
+       2. window.close destroyed the window inside a JS bridge call, so
+          pywebview's reply could not be delivered and its non-daemon worker
+          blocked interpreter shutdown forever. The destroy is now deferred so
+          the bridge call returns first.
+       Both are invisible on Windows, where the EdgeChromium backend does not
+       marshal geometry reads.
+
+     OTHER BUGS FOUND AND FIXED
+       Bare CR was deleted rather than acted on, so zsh's 80-space end-of-line
+         pad survived and the first prompt was pushed ~80 columns right until a
+         command was run. Carriage returns are now applied per line, CRLF stays a
+         line break, and SGR state carries across the overwrite.
+       ESC ( B charset designators were printed literally - top emits 243 of them
+         per 6.6 KB, littering every other line.
+       The maximized terminal panel used the translucent glass fill over the
+         dashboard, so cards showed through. Cross-platform, not Linux-specific.
+       os_toast.available() reported True on "which notify-send" alone. Confirmed
+         against a bus with no notification daemon: available() True, send()
+         False. It now also checks the Notifications name is owned or
+         activatable. Kali itself is unaffected - xfce4-notifyd is activated on
+         demand - so only minimal or headless setups were hit.
+       Double-click to restore a maximized window was a coin flip: mousedown
+         started a drag-restore that raced the dblclick, which then re-maximized.
+         The drag-restore now waits for real pointer movement.
+       tests/test_posix_pty.py drain() returned on the first sighting of the
+         needle, so the "a tty echoes" assertion only ever passed by luck of read
+         chunking. It passed under WSL and failed here.
+
+     GRAPHICS - THE VM NEEDED 3D, AND WEBKIT NEEDED A WORKAROUND
+       With 3D acceleration off the whole UI was software-rasterised: an idle,
+       empty terminal panel burned 161% of a core and scrolling 279%. With 3D
+       enabled in the hypervisor those drop to 5% and 95%. Enabling 3D exposed a
+       WebKitGTK bug - the DMA-BUF renderer paints a blank white window on
+       virtualised GL - so the launcher now exports
+       WEBKIT_DISABLE_DMABUF_RENDERER=1 on Linux, honouring an explicit override.
+       A separate stale-repaint rectangle under the titlebar (WebKit's
+       PropagateDamagingInformation vs vmwgfx) is cleared by a one-time full
+       repaint after load. That last one is a timing-based workaround for a
+       driver bug, not a real fix.
+
+     VERIFIED WORKING
+       Frameless drag by the titlebar, pixel-exact; drag of a maximized window
+         restores then follows the pointer
+       Edge and corner resize - xfwm4 provides invisible borders on an
+         undecorated window
+       Maximize, restore, minimize and close buttons, and double-click maximize
+       Terminal panel docked right, left, bottom and maximized: stty size follows
+         the panel (46x49 -> 11x260 -> 47x260) and top redraws without wrapping
+       The GTK/WebKit2 UI renders and is fully clickable
+
+     NOT TESTED, AND WHY
+       Multi-monitor restore - this machine has a single output, so
+         _screen_for_window and the _on_screen guard were only covered by unit
+         tests, not by moving a window between real monitors
+       HiDPI - GDK and pywebview both report scale factor 1 and Xft.dpi is unset,
+         so there is no scaling to exercise
+
+       pkexec inside the running app - it dies immediately leaving only
+         "[process exited]", while the same call works standalone and detached.
+         Cause not isolated. It no longer matters for the default path now that
+         elevation prefers sudo, but the pkexec branch is still reachable on a
+         box without sudo and is unverified there.
+     A PRE-EXISTING TEST RACE, FOUND BY RUNNING UNDER LOAD
+       test_resize_reaches_the_child failed about one run in eight. Reproduced
+       deliberately with six busy loops on an 8-core box: the tests wrote input
+       immediately after create_session, racing zsh's zle startup, so characters
+       were dropped and "stty size" arrived as "styiz". setUp now waits for the
+       shell's startup output to go quiet. The full suite then passed at 27.6 s
+       under load, where it had failed at 16 s before.
+
+================================================================================
+18. SESSION TRACKING TABLE
+================================================================================
+
+Mark Status as IMPLEMENTED when the session is finished, reviewed and committed.
+Anything partially done stays NOT IMPLEMENTED with a note.
+
++------+--------------------------------------------+----------+--------+-----------------+
+| ID   | Session                                    | Priority | Size   | Status          |
++------+--------------------------------------------+----------+--------+-----------------+
+| S01  | AI toggle button and nav spacing           | HIGH     | XS     | IMPLEMENTED     |
+| S02  | Terminal input correctness (Ctrl+C etc)    | HIGH     | S      | IMPLEMENTED     |
+| S03  | Backend read perf and adaptive polling     | HIGH     | S      | IMPLEMENTED     |
+| S04  | Incremental output rendering               | HIGH     | M      | IMPLEMENTED     |
+| S05  | Elevated session hardening                 | CRITICAL | S      | IMPLEMENTED     |
+| S06  | Run-action settings and settings UI        | HIGH     | M      | IMPLEMENTED     |
+| S07  | Run from snippets/commands + confirmation  | HIGH     | M      | IMPLEMENTED     |
+| S08  | Shell integration markers and exit codes   | HIGH     | M      | IMPLEMENTED     |
+| S09  | Job registry backend                       | HIGH     | M      | IMPLEMENTED     |
+| S10  | Jobs drawer UI                             | HIGH     | M/L    | IMPLEMENTED     |
+| S11  | Job output blocks and navigation           | HIGH     | M      | IMPLEMENTED     |
+| S12  | Fan-out runs and concurrency limits        | MEDIUM   | M      | IMPLEMENTED     |
+| S13  | Tab and session management                 | MEDIUM   | M      | IMPLEMENTED     |
+| S14  | Shell profiles                             | MEDIUM   | M      | IMPLEMENTED     |
+| S15  | Scrollback search, filter, status bar      | MEDIUM   | M      | IMPLEMENTED     |
+| S16  | Panel dock modes and maximize              | MEDIUM   | M      | IMPLEMENTED     |
+| S16b | Split view and floating terminal window    | LOW      | L      | PARTIAL         |
+| S17  | ANSI theming and escape handling           | MEDIUM   | M      | IMPLEMENTED     |
+| S18  | ConPTY on Windows                          | HIGH     | L      | FLAGGED OFF     |
+| S19  | Alt-screen / full-screen TUI support       | LOW      | L      | NOT IMPLEMENTED |
+| S20  | IOC expansion and bulk actions             | MEDIUM   | M      | IMPLEMENTED     |
+| S21  | Output parsers expansion                   | MEDIUM   | M      | IMPLEMENTED     |
+| S22  | Notes and targets integration              | MEDIUM   | M      | IMPLEMENTED     |
+| S23  | AI integration                             | MEDIUM   | M      | IMPLEMENTED     |
+| S24  | AI terminal tools over MCP                 | LOW      | M      | FLAGGED OFF     |
+| S25  | Dashboard cards, palette verbs, shortcuts  | LOW      | S/M    | IMPLEMENTED     |
+| S26  | Playbooks as job chains                    | MEDIUM   | M      | IMPLEMENTED     |
+| S27  | Audit, redaction and lock integration      | MEDIUM   | M      | IMPLEMENTED     |
+| S28  | Scrollback cost, spill and pty resize      | LOW      | L      | IMPLEMENTED     |
+| S29  | Tests                                      | MEDIUM   | M      | IMPLEMENTED     |
+| S30a | Linux verification under WSL               | MEDIUM   | M      | PARTIAL         |
+| S30b | Linux verification on a real desktop/VM    | LOW      | M      | IMPLEMENTED     |
++------+--------------------------------------------+----------+--------+-----------------+
+
+Size key:  XS under 50 lines changed | S under 150 | M under 400 | L over 400
+Status key: IMPLEMENTED means shipped and wired in. FLAGGED OFF means shipped
+            behind a setting that defaults to off. PARTIAL means some of the
+            scope landed and the rest is spelled out. NOT IMPLEMENTED means not
+            started - see that session's notes.
+
+SUGGESTED ORDER
+  Quick wins first        S01, S05, S02, S03
+  Foundation             S04, S08, S09
+  The two headline asks   S06, S07 for snippet-run, S10, S11 for jobs
+  Then                   S18 for Windows parity, then features by priority
+
+PROGRESS
+  Implemented: 23 / 31
+  Last updated: 2026-08-03
+
+================================================================================
+END OF DOCUMENT
+================================================================================

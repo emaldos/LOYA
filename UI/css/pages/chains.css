@@ -1,0 +1,62 @@
+/* Chains page (UI/pages/chains.html, UI/js/pages/chains.js). The toolbar reuses the Commands toolbar classes. */
+.chains-count{font-size:12px;color:var(--text-dim);white-space:nowrap}
+.chains-count:empty{display:none}
+/* Mount points for other views (e.g. a diagram editor): empty slots take no space. */
+.chains-toolbar-slot,.chains-view-switch-slot{display:flex;align-items:center;gap:6px}
+.chains-toolbar-slot:empty,.chains-view-switch-slot:empty{display:none}
+.chains-editor-area{display:flex;flex-direction:column;gap:10px;min-height:0}
+.cmds-playbooks-list>.cmds-empty-msg{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:8px}
+.chains-empty-hint{font-size:11.5px;color:var(--text-dim);max-width:360px}
+.chains-empty-new{margin-top:6px;padding:10px 18px}
+/* A fixed height (not max-height), as on Commands: WebKitGTK leaves the old edge of a resized backdrop-filter layer painted. */
+.cmds-playbooks-wrap{padding:16px;overflow:auto;height:calc(100% - 56px);box-sizing:border-box}
+.cmds-playbooks-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;align-content:start}
+.cmds-playbook-new-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:10px;border:1px dashed var(--glass-border);background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;font-weight:600}
+.cmds-playbook-new-btn:hover{color:var(--text);border-color:var(--accent-a)}
+.cmds-playbook-new-btn .icon{width:14px;height:14px}
+.cmds-playbook-card{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left}
+.cmds-playbook-card:hover{border-color:var(--accent-a)}
+.cmds-playbook-card-count{font-size:11px;color:var(--text-dim);font-weight:400}
+.cmds-playbook-detail-head{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.cmds-playbook-back{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px}
+.cmds-playbook-back:hover{color:var(--text);border-color:var(--accent-a)}
+.cmds-playbook-back .icon{width:12px;height:12px}
+.cmds-playbook-detail-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text);flex:1}
+.cmds-playbook-detail-actions{display:flex;gap:8px}
+.cmds-playbook-detail-actions button{padding:8px 14px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:var(--text);cursor:pointer;font-size:12px;font-weight:600}
+.cmds-playbook-detail-actions button:hover{border-color:var(--accent-a)}
+.cmds-playbook-detail-actions .danger:hover{border-color:var(--danger);color:var(--danger)}
+.cmds-playbook-steps{display:flex;flex-direction:column;gap:10px}
+.cmds-playbook-step{display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border);transition:border-color 150ms ease,opacity 150ms ease}
+.cmds-playbook-step.active{border-color:var(--accent-a);box-shadow:0 0 0 1px var(--accent-a)}
+.cmds-playbook-step.done{opacity:0.5}
+.cmds-playbook-step-num{width:24px;height:24px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--accent-a-soft);color:var(--accent-a);font-size:11px;font-weight:700}
+.cmds-playbook-step-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.cmds-playbook-step-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cmds-playbook-step-title{font-size:13px;font-weight:700;color:var(--text)}
+.cmds-playbook-step-actions{display:flex;flex-direction:column;gap:4px;flex:0 0 auto}
+.cmds-playbook-step-actions button{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:1px solid var(--glass-border);background:transparent;border-radius:7px;color:var(--text-dim);cursor:pointer}
+.cmds-playbook-step-actions button:hover{border-color:var(--accent-a);color:var(--text);background:var(--bg)}
+.cmds-playbook-step-actions .icon{width:11px;height:11px}
+.cmds-playbook-card{flex-wrap:wrap;gap:6px 10px;min-height:52px;font-family:inherit}
+.cmds-playbook-card-name{flex:1 1 100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmds-playbook-card-caller{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmds-playbook-card-count{margin-left:auto}
+.cmds-playbook-card:focus-visible,.cmds-playbook-back:focus-visible,.cmds-playbook-detail-actions button:focus-visible{outline:none;border-color:var(--accent-a)}
+.cmds-playbook-detail-actions{flex-wrap:wrap}
+.cmds-playbook-detail-head h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmds-playbook-step-actions button:disabled{opacity:0.35;cursor:default}
+.cmds-playbook-step-actions button:disabled:hover{border-color:var(--glass-border);color:var(--text-dim);background:transparent}
+.cmds-playbook-step-actions{flex-direction:row;align-self:center}
+.chains-tool-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text);cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;}
+.chains-tool-btn:hover,.chains-tool-btn:focus-visible{border-color:var(--accent-a);outline:none}
+.chains-tool-btn .icon{width:14px;height:14px}
+.chains-flow-host{height:calc(100% - 56px);box-sizing:border-box}
+/* Search and count on the left, every button (slot, New Diagram, New Action Chain) on the right. */
+.chains-toolbar .chains-count{margin-right:auto}
+.chains-toolbar .cmds-search:has(+.chains-count:empty){margin-right:auto}
+.chains-toolbar .cmds-new-btn{margin-left:0}
+/* Narrow content (terminal and AI panels both docked): wrap the buttons onto a second row instead of pushing New Action Chain off-screen. */
+.chains-toolbar{flex-wrap:wrap;row-gap:8px}
+.chains-toolbar .cmds-search{min-width:160px}
+.chains-toolbar .chains-tool-btn,.chains-toolbar .cmds-new-btn{white-space:nowrap}

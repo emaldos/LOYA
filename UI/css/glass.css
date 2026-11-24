@@ -1,0 +1,96 @@
+/* Glass appearance style: iOS/visionOS "liquid glass" edges on the shared surfaces.
+   Every rule is keyed off html[data-style="glass"], so data-style="classic" renders exactly as before this file existed.
+   The [data-style] part sits inside :where() (zero specificity), so each rule weighs the same as the plain class rule it extends:
+   it beats the base rules (this file loads last) but still loses to :hover/:focus/.active states, which keep their own rings.
+   Techniques: box-shadow only (an inset top specular line, a faint dark bottom line, a soft inner top glow and bottom depth) on every
+   surface, plus a 1px diagonal gradient rim drawn by a masked ::before on the surfaces that do not scroll (a pseudo-element inside a
+   scroll container would scroll away). Both follow border-radius. No extra backdrop-filter layers are added; menus that were made
+   solid (08d3492) stay solid. */
+:where([data-style="glass"]){
+--glass-blur:26px;
+--gl-rim-a:rgba(255,255,255,0.50);
+--gl-rim-b:rgba(255,255,255,0.10);
+--gl-rim-c:rgba(255,255,255,0.03);
+--gl-rim-d:rgba(255,255,255,0.22);
+--gl-spec:rgba(255,255,255,0.14);
+--gl-under:rgba(0,0,0,0.30);
+--gl-sheen:rgba(255,255,255,0.07);
+--gl-depth:rgba(0,0,0,0.22);
+--gl-btn-spec:rgba(255,255,255,0.13);
+--gl-btn-under:rgba(0,0,0,0.25);
+--gl-field-inset:rgba(0,0,0,0.28);
+--gl-field-lip:rgba(255,255,255,0.06);
+--gl-drop:var(--glass-shadow);
+}
+:where([data-style="glass"][data-theme="royal"]){
+--gl-rim-a:rgba(255,236,190,0.46);
+--gl-rim-b:rgba(255,226,160,0.10);
+--gl-rim-c:rgba(255,226,160,0.03);
+--gl-rim-d:rgba(230,230,235,0.20);
+--gl-spec:rgba(255,236,190,0.13);
+--gl-sheen:rgba(255,226,160,0.06);
+--gl-btn-spec:rgba(255,236,190,0.15);
+}
+:where([data-style="glass"][data-theme="light"]){
+--gl-rim-a:rgba(255,255,255,1);
+--gl-rim-b:rgba(255,255,255,0.55);
+--gl-rim-c:rgba(140,160,200,0.18);
+--gl-rim-d:rgba(255,255,255,0.85);
+--gl-spec:rgba(255,255,255,0.95);
+--gl-under:rgba(40,60,110,0.10);
+--gl-sheen:rgba(255,255,255,0.55);
+--gl-depth:rgba(40,60,110,0.05);
+--gl-btn-spec:rgba(255,255,255,0.95);
+--gl-btn-under:rgba(40,60,110,0.12);
+--gl-field-inset:rgba(40,60,110,0.10);
+--gl-field-lip:rgba(255,255,255,0.9);
+--gl-drop:0 1px 2px rgba(30,45,80,0.07),0 10px 30px -6px rgba(30,45,80,0.16);
+}
+
+/* ---- Every glass surface: lit top edge, dark bottom edge, inner sheen and depth (follows border-radius). ---- */
+:where([data-style="glass"]) .glass-panel,
+:where([data-style="glass"]) .terminal-panel,
+:where([data-style="glass"]) .ai-panel,
+:where([data-style="glass"]) .toast,
+:where([data-style="glass"]) .status-island{
+box-shadow:var(--gl-drop),inset 0 1px 0 0 var(--gl-spec),inset 0 -1px 0 0 var(--gl-under),inset 0 22px 30px -26px var(--gl-sheen),inset 0 -18px 26px -24px var(--gl-depth);
+}
+/* The translucent panels get a little more saturation through the blur they already have (no new blur layers). The solid menus keep none. */
+:where([data-style="glass"]) .glass-panel:where(:not(.app-context-menu,.ui-select-popover,.terminal-popover,.terminal-suggest,.palette-box,.cmds-suggest)){
+backdrop-filter:blur(var(--glass-blur)) saturate(150%);
+-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(150%);
+}
+/* Surfaces that had their own drop shadow keep it under the glass edge. */
+:where([data-style="glass"]) .bottom-nav{--gl-drop:0 10px 30px rgba(0,0,0,0.38)}
+:where([data-style="glass"][data-theme="light"]) .bottom-nav{--gl-drop:0 10px 30px rgba(20,20,40,0.18)}
+[data-style="glass"][data-theme="light"] .bottom-nav{box-shadow:var(--gl-drop),inset 0 1px 0 0 var(--gl-spec),inset 0 -1px 0 0 var(--gl-under),inset 0 22px 30px -26px var(--gl-sheen)}
+:where([data-style="glass"]) .lock-box{--gl-drop:0 24px 64px -20px rgba(0,0,0,0.55),0 0 0 1px var(--glass-border)}
+:where([data-style="glass"]) .notes-backlink-chip{--gl-drop:0 8px 20px -8px rgba(0,0,0,0.4)}
+:where([data-style="glass"]) .terminal-panel,:where([data-style="glass"]) .ai-panel{--gl-drop:0 0 0 transparent}
+
+/* ---- Specular rim: a 1px diagonal gradient ring, brightest at the top-left, a faint catch at the bottom-right. ---- */
+:where([data-style="glass"]) :is(.set-box,.ai-offline-card,.lock-box,.palette-box,.notes-sidebar,.toast,.mini-frame,.confirm-box,.shortcuts-modal,.set-ie-modal,.notes-picker-modal,.term-fanout-modal,.notes-graph-modal,.notes-history-modal):where(:not(.app-modal-card)){position:relative}
+:where([data-style="glass"]) :is(.titlebar,.dash-card,.bottom-nav,.mini-frame,.set-box,.ai-offline-card,.lock-box,.palette-box,.notes-sidebar,.confirm-box,.shortcuts-modal,.set-ie-modal,.notes-picker-modal,.term-fanout-modal,.notes-graph-modal,.notes-history-modal,.onboarding-tooltip,.dash-popover,.snip-note-popover,.app-context-menu,.terminal-panel,.ai-panel,.notes-find-bar,.notes-backlink-chip,.toast,.status-island):where(:not(.app-modal-card))::before{
+content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;padding:1px;pointer-events:none;
+background:linear-gradient(145deg,var(--gl-rim-a) 0%,var(--gl-rim-b) 28%,var(--gl-rim-c) 55%,var(--gl-rim-c) 72%,var(--gl-rim-d) 100%);
+-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+-webkit-mask-composite:xor;
+mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+mask-composite:exclude;
+}
+/* The closed dock capsule is only 14px tall: a full ring would read as a outline, so keep it to the top edge there. */
+:where([data-style="glass"]) .bottom-nav:not(.expanded)::before{background:linear-gradient(180deg,var(--gl-rim-a),transparent 70%)}
+
+/* ---- Buttons and chips: a small lit lip on top and a shaded one underneath. ---- */
+:where([data-style="glass"]) :is(.set-btn,.set-tab,.set-ie-action,.set-accent-cell,.dash-quick-btn,.dash-edit-btn,.cmds-new-btn,.cmds-run-btn,.cmds-page-btn,.tgt-new-btn,.tgt-tab,.tgt-profile-btn,.tgt-merge-btn,.tgt-links-btn,.snip-sort-btn,.snip-run-btn,.notes-new-btn,.notes-tpl-btn,.notes-editor-save,.notes-editor-cancel,.notes-editor-draft,.ai-default-btn,.lock-submit,.titlebar-search,.titlebar-version-badge,.ai-toggle-btn,.ui-select-trigger:where(:not(.ai-provider-select))){
+box-shadow:inset 0 1px 0 0 var(--gl-btn-spec),inset 0 -1px 0 0 var(--gl-btn-under);
+}
+/* Selected nav button and selected tabs: the same lip on top of the accent fill. */
+:where([data-style="glass"]) .nav-btn.active{box-shadow:0 0 0 1px var(--glass-border),inset 0 1px 0 0 var(--gl-btn-spec),inset 0 -1px 0 0 var(--gl-btn-under)}
+/* The two round dock tools (AI and Terminal) read as glass beads: lit cap, shaded base. Hover/active rings still come from ai.css. */
+:where([data-style="glass"]) .ai-toggle-btn{box-shadow:inset 0 1px 0 0 var(--gl-btn-spec),inset 0 -2px 4px -1px var(--gl-btn-under),inset 0 8px 12px -8px var(--gl-sheen)}
+
+/* ---- Text fields: recessed glass (shaded top inside, lit bottom lip). Focus rings from the page CSS still win. ---- */
+:where([data-style="glass"]) :is(.set-input,.notes-editor-input,.tgt-key-input,.tgt-key-name-input,.tgt-priority-input,.ai-chat-input,.lock-input,.mini-input){
+box-shadow:inset 0 1px 2px 0 var(--gl-field-inset),inset 0 -1px 0 0 var(--gl-field-lip);
+}

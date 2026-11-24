@@ -1,0 +1,20 @@
+// One-line fenced code (```code``` / ``code``) must convert while typing, like ``` + Enter does.
+const M=require("../../UI/js/components/markdown.js")
+let passed=0,failed=0
+function check(name,ok,detail){if(ok)passed++;else{failed++;console.log("FAIL: "+name+(detail?" - "+detail:""))}}
+const t=(s)=>M.inlineTrigger(s)
+let h=t("```ping 192.168.1.1```")
+check("whole-line triple fence is a code block",h&&h.type==="code"&&h.block===true&&h.text==="ping 192.168.1.1"&&h.start===0,JSON.stringify(h))
+h=t("  ```id```")
+check("leading spaces still count as a whole line",h&&h.block===true,JSON.stringify(h))
+h=t("run ```whoami``` here".slice(0,"run ```whoami```".length))
+check("triple fence after text is inline code",h&&h.type==="code"&&h.block===false&&h.text==="whoami"&&h.start===4,JSON.stringify(h))
+h=t("``ls -la``")
+check("double fence is inline code",h&&h.type==="code"&&h.block===false&&h.text==="ls -la",JSON.stringify(h))
+check("single backtick still inline code",(h=t("x `a`"))&&h.type==="code"&&h.text==="a",JSON.stringify(h))
+check("four backticks are ignored",t("````x````")===null)
+check("empty fence is ignored",t("```  ```")===null)
+check("unclosed fence is ignored",t("```bash")===null)
+check("bold still works",(h=t("**b**"))&&h.type==="bold")
+console.log(passed+" passed, "+failed+" failed")
+process.exit(failed?1:0)

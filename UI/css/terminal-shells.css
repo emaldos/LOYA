@@ -1,0 +1,58 @@
+/* Settings > Extensions: Terminal Shells and Kali Linux on WSL. Tokens only, so Glass / Classic and dark / light / royal all follow. */
+.tsh-box .set-input,.tsh-box .set-select,.tsh-box .set-btn,.tsh-notes-btn,.tsh-notes-x{font-family:inherit}
+.tsh-dim{color:var(--text-dim)}
+.tsh-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--glass-border);background:var(--glass-bg);font-size:11px;color:var(--text-dim);overflow-wrap:anywhere}
+.tsh-pill.ok{color:var(--text);border-color:var(--accent-a);background:var(--accent-a-soft)}
+.tsh-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 18px;padding:10px 14px;border-radius:10px;background:var(--glass-bg);border:1px solid var(--glass-border)}
+.tsh-status-row{display:flex;flex-direction:column;gap:2px;font-size:12px;min-width:0;overflow-wrap:anywhere}
+.tsh-status-row .tsh-dim{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
+.tsh-mode-row{flex-wrap:wrap}
+.tsh-mode-row .set-select{min-width:220px}
+.tsh-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 14px}
+.tsh-field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim);min-width:0}
+.tsh-field .set-input,.tsh-field .set-select{width:100%;box-sizing:border-box}
+.tsh-reasons{display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-radius:10px;border:1px dashed var(--glass-border);font-size:12px}
+.tsh-reasons>.tsh-dim{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
+.tsh-reason{margin:0;line-height:1.5;color:var(--text)}
+.tsh-reasons .set-btn{align-self:flex-start}
+.tsh-warn{color:var(--text);border-left:3px solid var(--danger);padding-left:8px}
+.tsh-actions{flex-wrap:wrap}
+.tsh-log{max-height:150px;overflow:auto;-webkit-user-select:text;user-select:text}
+.tsh-confirm-note{margin:0 0 8px;font-size:12px;line-height:1.5;color:var(--text)}
+.tsh-unreg{margin-top:10px}
+#tshUnregName{margin-top:6px;width:100%;box-sizing:border-box}
+/* wizard steps */
+.tsh-steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.tsh-step{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid var(--glass-border);background:var(--glass-bg);font-size:11px;color:var(--text-dim)}
+.tsh-step-n{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:1px solid var(--glass-border)}
+.tsh-step.current{color:var(--text);border-color:var(--accent-a);background:var(--accent-a-soft)}
+.tsh-step.current .tsh-step-n{background:var(--accent-a);border-color:var(--accent-a);color:#fff}
+.tsh-step.done{color:var(--text)}
+.tsh-step.done .tsh-step-n{border-color:var(--accent-a);color:var(--accent-a)}
+.tsh-step-body{display:flex;flex-direction:column;gap:8px}
+.tsh-step-body code{font-family:var(--font-mono);font-size:11px}
+/* verification */
+.tsh-verify{display:flex;flex-direction:column;gap:4px;font-size:12px}
+.tsh-check{display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
+.tsh-check-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--danger)}
+.tsh-check.ok .tsh-check-dot{background:var(--accent-a)}
+/* the red "!" notes button: a gentle bump that asks for a click */
+.tsh-notes-btn{width:26px;height:26px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:50%;border:1px solid var(--danger);background:var(--danger);color:#fff;font-size:14px;font-weight:800;line-height:1;cursor:pointer;animation:tsh-bump 2.4s ease-in-out infinite}
+.tsh-notes-btn:hover,.tsh-notes-btn[aria-expanded="true"]{animation-play-state:paused;filter:brightness(1.1)}
+.tsh-notes-btn:focus-visible{outline:2px solid var(--accent-a);outline-offset:2px}
+@keyframes tsh-bump{0%,70%,100%{transform:scale(1);box-shadow:0 0 0 0 transparent}78%{transform:scale(1.14);box-shadow:0 0 0 0 var(--danger)}90%{transform:scale(1);box-shadow:0 0 0 7px transparent}}
+@media (prefers-reduced-motion:reduce){.tsh-notes-btn{animation:none}}
+/* notes: inline (100 s) and popover */
+.tsh-notes-inline,.tsh-notes-popover{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--danger);background:var(--glass-bg);color:var(--text);font-size:12px;line-height:1.5}
+.tsh-notes-popover{position:fixed;z-index:9000;box-sizing:border-box;box-shadow:var(--glass-shadow);outline:none;background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--bg)}
+.tsh-notes-inline-head{display:flex;align-items:center;gap:8px}
+.tsh-notes-inline-title{font-weight:700;flex:1 1 auto}
+.tsh-notes-count{font-size:10px;color:var(--text-dim);white-space:nowrap}
+.tsh-notes-x{width:22px;height:22px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:50%;background:transparent;color:var(--text-dim);font-size:16px;line-height:1;cursor:pointer}
+.tsh-notes-x:hover{background:var(--danger);color:#fff}
+.tsh-notes-x:focus-visible{outline:2px solid var(--accent-a);outline-offset:1px}
+.tsh-notes-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:1.5;color:var(--text)}
+.tsh-notes-bar{height:3px;border-radius:2px;background:var(--glass-border);overflow:hidden}
+.tsh-notes-bar span{display:block;height:100%;background:var(--danger);opacity:0.7;transition:width 1s linear}
+@media (prefers-reduced-motion:reduce){.tsh-notes-bar span{transition:none}}
+.term-confirm-note{margin:0 0 8px;font-size:12px;line-height:1.5}

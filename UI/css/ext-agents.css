@@ -1,0 +1,77 @@
+/* External Agents: Settings > AI > Agents box, consent dialog, AI panel banner. LOYA's own look - no third-party branding. */
+.ext-box{margin-top:10px}
+.ext-box .ai-provider-fields{align-items:flex-end}
+.ext-box .ai-provider-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ext-powered{font-size:10px;color:var(--text-dim);font-weight:600;margin-left:6px}
+.ext-line{font-size:11px;color:var(--text-dim);display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.ext-version,.ext-consent-ts{font-size:11px;color:var(--text-dim)}
+.ext-reconsent{font-size:11px;color:var(--danger);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ext-limits{display:flex;flex-wrap:wrap;gap:8px}
+.ext-lim{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--text-dim);min-width:0}
+.ext-lim .set-input{width:110px}
+.ext-advanced summary{cursor:pointer;font-size:12px;color:var(--text);-webkit-user-select:none;user-select:none}
+.ext-advanced[open]{display:flex;flex-direction:column;gap:6px}
+.ext-tools{display:flex;flex-wrap:wrap;gap:6px 14px}
+.ext-mcp-token{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px}
+.ext-mcp-token code{font-family:var(--font-mono);font-size:11px;padding:2px 6px;border-radius:6px;background:var(--glass-bg);border:1px solid var(--glass-border)}
+.ext-consent{max-width:min(640px,calc(100vw - 32px))}
+.ext-consent-body{display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.5;max-height:min(60vh,520px);overflow:auto;padding-right:4px}
+.ext-consent-body ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.ext-consent-perm{font-size:11px;color:var(--text-dim);margin:0}
+.ext-consent-disclaimer summary{cursor:pointer;font-weight:600;-webkit-user-select:none;user-select:none}
+.ext-consent-disclaimer pre{white-space:pre-wrap;font-family:var(--font-ui);font-size:11px;max-height:220px;overflow:auto;margin:6px 0 0;padding:8px;border-radius:8px;background:var(--glass-bg);border:1px solid var(--glass-border)}
+.ext-consent-ack{font-weight:600}
+.confirm-ok:disabled{opacity:0.45;cursor:not-allowed}
+.ai-ext-banner{display:flex;align-items:center;gap:8px;margin:0 10px 6px;padding:6px 10px;border-radius:10px;font-size:11px;line-height:1.35;color:var(--text);background:var(--glass-bg);border:1px solid var(--accent-a)}
+.ai-ext-banner .icon{width:14px;height:14px;flex:0 0 auto;color:var(--accent-a)}
+.ai-ext-banner span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.ai-ext-stop{flex:0 0 auto;font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);cursor:pointer;font-family:inherit}
+.ai-ext-stop:hover{background:var(--danger);color:#fff}
+.ai-approval-reason{font-size:12px;line-height:1.45;color:var(--text);overflow-wrap:anywhere}
+/* Settings > AI > Agents > Connections: the operator's own Claude Code / Codex CLI */
+.conn-box{margin-top:10px}
+.conn-box .ai-provider-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.conn-pills{display:flex;gap:6px;flex-wrap:wrap}
+.conn-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;margin:0;font-size:11.5px}
+.conn-facts dt{color:var(--text-dim)}
+.conn-facts dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--text)}
+.conn-facts code,.conn-install code{font-family:var(--font-mono);font-size:11px}
+.conn-install{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.conn-install pre{margin:0;padding:6px 8px;border-radius:8px;background:var(--glass-bg);border:1px solid var(--glass-border);white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:11px;-webkit-user-select:text;user-select:text}
+.conn-actions{display:flex;flex-wrap:wrap;gap:8px}
+.conn-steps{margin:0;padding-left:18px;font-size:11.5px;display:flex;flex-direction:column;gap:2px}
+.conn-steps .ok{color:#22c55e}
+[data-theme="light"] .conn-steps .ok{color:#15803d}
+.conn-steps .bad{color:var(--danger)}
+.conn-manual summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--text);-webkit-user-select:none;user-select:none}
+.conn-manual[open]{display:flex;flex-direction:column;gap:8px}
+.conn-method{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg)}
+.conn-method-head{font-size:12px}
+.conn-src{font-size:11px;color:var(--text-dim)}
+.conn-src code{font-family:var(--font-mono);font-size:10.5px}
+.conn-method-note,.conn-next{font-size:11px;color:var(--text-dim)}
+.conn-next{font-weight:600;color:var(--text)}
+.conn-missing{font-size:11px;color:var(--danger);overflow-wrap:anywhere}
+.conn-cmd{display:grid;grid-template-columns:max-content minmax(0,1fr) max-content;align-items:center;gap:8px}
+.conn-cmd-label{font-size:11px;color:var(--text-dim)}
+.conn-cmd pre{margin:0;padding:6px 8px;border-radius:8px;background:var(--glass-bg);border:1px solid var(--glass-border);white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:11px;color:var(--text);-webkit-user-select:text;user-select:text}
+.conn-cmd .set-btn{padding:5px 10px;font-size:11px}
+.conn-wiz{width:min(680px,calc(100vw - 32px));max-height:min(86vh,760px);display:flex;flex-direction:column;gap:12px}
+.conn-wiz-steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.conn-wiz-steps li{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:20px;border:1px solid var(--glass-border);font-size:11px;color:var(--text-dim)}
+.conn-wiz-num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--glass-bg);border:1px solid var(--glass-border);font-size:10px;font-weight:700}
+.conn-wiz-steps li.current{color:var(--text);border-color:var(--accent-a);background:var(--accent-a-soft)}
+.conn-wiz-steps li.current .conn-wiz-num{background:var(--accent-a);border-color:var(--accent-a);color:#fff}
+.conn-wiz-steps li.done .conn-wiz-num{background:#22c55e;border-color:#22c55e;color:#fff}
+[data-theme="light"] .conn-wiz-steps li.done .conn-wiz-num{background:#15803d;border-color:#15803d}
+.conn-wiz-body{display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.5;overflow:auto;min-height:120px;padding-right:4px}
+.conn-wiz-body p{margin:0}
+.conn-wiz-title{font-size:13px;font-weight:700;color:var(--text)}
+.conn-wiz-done{color:#22c55e;font-weight:600}
+[data-theme="light"] .conn-wiz-done{color:#15803d}
+.conn-wiz-warn{padding:6px 8px;border-radius:8px;border:1px solid var(--danger);color:var(--text);font-size:11.5px}
+.conn-wiz-methods{display:flex;flex-direction:column;gap:6px}
+.conn-wiz-method{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;border:1px solid var(--glass-border);cursor:pointer}
+.conn-wiz-method.off{opacity:.75;cursor:default}
+.conn-wiz-method input{margin-top:3px}
+.conn-wiz .confirm-actions button:disabled{opacity:.45;cursor:not-allowed}

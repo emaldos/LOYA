@@ -1,0 +1,93 @@
+/* Action chains: pre-run dialogs and the live progress card (UI/js/components/action-chains.js). */
+.ac-note{font-size:12.5px;line-height:1.45;color:var(--text)}
+.ac-note-dim{color:var(--text-dim)}
+.ac-key{display:inline-block;padding:1px 6px;margin:0 4px 3px 0;border-radius:6px;border:1px solid var(--pal-ph-unknown);color:var(--pal-ph-unknown);font-family:var(--font-mono);font-size:11.5px}
+.ac-missing-list{display:flex;flex-direction:column;gap:6px}
+.ac-missing-step{padding:7px 10px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg)}
+.ac-missing-head{display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font-size:12px}
+.ac-missing-num{font-weight:700;color:var(--text-dim);white-space:nowrap}
+.ac-missing-label{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-target-picks{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
+.ac-target-pick{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text);font-family:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.ac-target-pick:hover,.ac-target-pick:focus-visible{border-color:var(--accent-a);background:var(--accent-a-soft);outline:none}
+.ac-target-pick span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-target-count{color:var(--text-dim);font-size:11px}
+.ac-fill-note{display:flex;align-items:flex-start;gap:10px;justify-content:space-between;margin:6px 0 8px;padding:8px 10px;border-radius:10px;border:1px solid var(--pal-ph-unknown);font-size:12px;line-height:1.4;color:var(--text)}
+.ac-fill-all{flex:0 0 auto;padding:4px 8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:var(--text);font-family:inherit;font-size:11.5px;cursor:pointer}
+.tgt-popover-field.ac-fill-field input{border-color:var(--pal-ph-unknown)}
+/* Hosts */
+.ac-runs-overlay{position:absolute;right:10px;bottom:62px;z-index:30;display:flex;flex-direction:column;gap:8px;width:min(460px,calc(100% - 20px));max-height:calc(100% - 140px);pointer-events:none}
+.ac-runs-overlay>.ac-run{pointer-events:auto}
+.ac-runs-dock{position:fixed;right:24px;bottom:96px;z-index:70;display:flex;flex-direction:column;gap:8px;width:min(460px,calc(100vw - 48px));max-height:60vh}
+.ac-runs-dock:empty,.ac-runs-overlay:empty{display:none}
+#cmdsChainRunHost:empty{display:none}
+#cmdsChainRunHost{margin:0 0 10px}
+#cmdsChainRunHost .ac-run{box-shadow:none;max-height:none}
+/* Card */
+.ac-run{display:flex;flex-direction:column;min-height:0;max-height:100%;border-radius:14px;border:1px solid var(--glass-border);background:linear-gradient(var(--glass-bg),var(--glass-bg)),var(--bg);box-shadow:0 12px 32px rgba(0,0,0,0.38);color:var(--text);overflow:hidden;-webkit-user-select:none;user-select:none}
+.ac-run-head{display:flex;align-items:center;gap:10px;padding:10px 10px 8px 12px}
+.ac-run-icon{flex:0 0 auto;width:18px;height:18px;border-radius:50%;box-sizing:border-box;position:relative}
+.ac-run-running .ac-run-icon{border:2px solid var(--accent-a-soft);border-top-color:var(--accent-a);animation:ac-spin .8s linear infinite}
+.ac-run-done .ac-run-icon{background:var(--pal-success)}
+.ac-run-failed .ac-run-icon{background:var(--danger)}
+.ac-run-stopped .ac-run-icon{background:var(--pal-ph-unknown)}
+.ac-run-done .ac-run-icon::after{content:"";position:absolute;left:6px;top:3px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.ac-run-failed .ac-run-icon::after,.ac-run-stopped .ac-run-icon::after{content:"";position:absolute;left:4px;top:8px;width:10px;height:2px;background:#fff}
+.ac-run-titles{flex:1;min-width:0}
+.ac-run-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-run-caller{font-family:var(--font-mono);font-weight:600;color:var(--accent-a);margin-right:6px}
+.ac-run-sub{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.ac-run-actions{display:flex;gap:4px;flex:0 0 auto}
+.ac-run-btn{display:inline-flex;align-items:center;gap:5px;height:26px;min-width:26px;padding:0 6px;justify-content:center;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:var(--text);font-family:inherit;font-size:11.5px;cursor:pointer}
+.ac-run-btn:hover{border-color:var(--accent-a);background:var(--accent-a-soft)}
+.ac-run-cancel:hover{border-color:var(--danger);background:transparent;color:var(--danger)}
+.ac-run-btn .icon{width:13px;height:13px}
+.ac-run-bar{display:flex;gap:3px;height:6px;margin:0 12px 8px}
+.ac-seg{flex:1;border-radius:3px;background:var(--glass-border)}
+.ac-seg.ac-done{background:var(--pal-success)}
+.ac-seg.ac-failed,.ac-seg.ac-killed,.ac-seg.ac-orphaned{background:var(--danger)}
+.ac-seg.ac-skipped{background:repeating-linear-gradient(135deg,var(--glass-border) 0 4px,transparent 4px 8px);opacity:.9}
+.ac-seg.ac-running{background:repeating-linear-gradient(-45deg,var(--accent-a) 0 6px,var(--accent-b) 6px 12px);background-size:17px 6px;animation:ac-stripes .7s linear infinite}
+.ac-run-steps{flex:1;min-height:0;overflow:auto;padding:0 6px 6px;display:flex;flex-direction:column;gap:2px}
+.ac-run.collapsed .ac-run-steps,.ac-run.collapsed .ac-run-foot{display:none}
+.ac-step{display:flex;align-items:flex-start;gap:8px;padding:6px 6px;border-radius:9px;cursor:pointer}
+.ac-step:hover{background:var(--glass-bg)}
+.ac-step.open{background:var(--glass-bg)}
+.ac-step-mark{flex:0 0 auto;width:14px;height:14px;margin-top:2px;border-radius:50%;box-sizing:border-box;border:2px solid var(--glass-border);position:relative}
+.ac-step.ac-running .ac-step-mark{border-color:var(--accent-a-soft);border-top-color:var(--accent-a);animation:ac-spin .8s linear infinite}
+.ac-step.ac-done .ac-step-mark{border-color:var(--pal-success);background:var(--pal-success)}
+.ac-step.ac-done .ac-step-mark::after{content:"";position:absolute;left:3px;top:0;width:3px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.ac-step.ac-failed .ac-step-mark,.ac-step.ac-killed .ac-step-mark,.ac-step.ac-orphaned .ac-step-mark{border-color:var(--danger);background:var(--danger)}
+.ac-step.ac-failed .ac-step-mark::after,.ac-step.ac-killed .ac-step-mark::after{content:"!";position:absolute;inset:0;font-size:9px;line-height:10px;font-weight:800;text-align:center;color:#fff}
+.ac-step.ac-skipped .ac-step-mark{border-style:dashed}
+.ac-step-num{flex:0 0 auto;min-width:14px;font-size:11px;font-weight:700;color:var(--text-dim);margin-top:2px;font-variant-numeric:tabular-nums}
+.ac-step-main{flex:1;min-width:0}
+.ac-step-label{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-step-cmd{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-step.ac-skipped .ac-step-label,.ac-step.ac-skipped .ac-step-cmd,.ac-step.ac-pending .ac-step-label{opacity:.7}
+.ac-step-reason{margin-top:2px;font-size:11px;color:var(--pal-ph-unknown)}
+.ac-step-meta{flex:0 0 auto;font-size:11px;color:var(--text-dim);white-space:nowrap;margin-top:2px;font-variant-numeric:tabular-nums}
+.ac-step.ac-done .ac-step-meta{color:var(--pal-success)}
+.ac-step.ac-failed .ac-step-meta,.ac-step.ac-killed .ac-step-meta{color:var(--danger)}
+.ac-step.ac-running .ac-step-meta{color:var(--accent-a)}
+.ac-step-out{margin:0 6px 4px 36px;padding:8px 10px;max-height:180px;overflow:auto;border-radius:8px;border:1px solid var(--glass-border);background:var(--pal-code-bg);color:var(--text);font-family:var(--font-mono);font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-all;-webkit-user-select:text;user-select:text;cursor:text}
+.ac-run-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;border-top:1px solid var(--glass-border);font-size:11.5px;color:var(--text-dim)}
+.ac-run-link{border:none;background:transparent;color:var(--accent-a);font-family:inherit;font-size:11.5px;cursor:pointer;padding:0}
+.ac-run-link:hover{text-decoration:underline}
+.ac-run-foot>span{flex:1;min-width:0}
+#cmdsChainRunHost .ac-run-link[data-ac="open"]{display:none}
+@keyframes ac-spin{to{transform:rotate(360deg)}}
+@keyframes ac-stripes{from{background-position:0 0}to{background-position:17px 0}}
+@media (prefers-reduced-motion:reduce){.ac-run-running .ac-run-icon,.ac-step.ac-running .ac-step-mark,.ac-seg.ac-running{animation:none}}
+/* Chain caller editing on the Chains page */
+.cmds-chain-caller{display:inline-flex;align-items:center;gap:0;height:28px;padding:0 4px 0 8px;border-radius:9px;border:1px solid var(--glass-border);background:var(--glass-bg);font-family:var(--font-mono);font-size:12.5px}
+.cmds-chain-caller:focus-within{border-color:var(--accent-a)}
+.cmds-chain-caller.invalid{border-color:var(--danger)}
+.cmds-chain-caller-slash{color:var(--accent-a);font-weight:700}
+.cmds-chain-caller input{width:150px;height:24px;border:none;background:transparent;color:var(--text);font-family:var(--font-mono);font-size:12.5px;outline:none;padding:0 2px}
+.cmds-chain-caller-err{font-size:11.5px;color:var(--danger)}
+.cmds-chain-caller-err:empty{display:none}
+.cmds-chain-caller-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-2px 0 10px}
+.cmds-chain-caller-hint{font-size:11.5px;color:var(--text-dim)}
+.cmds-playbook-card-caller{font-family:var(--font-mono);font-size:11.5px;color:var(--accent-a)}
+.cmds-popover-hint{font-size:11px;color:var(--text-dim);margin-top:3px}
