@@ -32,7 +32,7 @@ Driving tips:
 1. Tour every page and every Settings tab; open every modal/popover (Add Note/Command/Target, selects, menus, terminal panel, AI panel, mini window). Screenshot each.
 2. For anything that looks off, measure with `js.sh` (computed style, `getBoundingClientRect`, `elementsFromPoint`) before deciding the cause. If nothing in the DOM is at a spot that shows pixels, it is a stale repaint, not CSS.
 3. Grep the code for the pitfalls below.
-4. Log every finding (symptom, measured evidence, root cause file:line, Linux-only or not, fix, how verified) in the audit log the user asked for, and keep the session notes in `Update terminal.txt` style.
+4. Log every finding (symptom, measured evidence, root cause file:line, Linux-only or not, fix, how verified) in the audit log the user asked for.
 5. After each fix, re-verify live with a screenshot, and run both suites:
    `.venv_linux/bin/python3 -m unittest discover -s tests -p "test_*.py"` and `node tests/js/run.js`.
 
