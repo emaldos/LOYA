@@ -247,7 +247,26 @@ class WindowsAclTests(unittest.TestCase):
             self.assertEqual("/inheritance:r",c[2])
             self.assertIn("*S-1-5-21-111-222-333-1001:(OI)(CI)F",c)
             self.assertIn("*S-1-5-18:(OI)(CI)F",c)
-            self.assertFalse([a for a in c if "Users" in a or "Everyone" in a])
+            self.assertFalse([a for a in c[2:] if "Users" in a or "Everyone" in a])
+            self.assertNotIn("/T",c)
+    def test_already_hardened_resets_unreadable_children(self):
+        run,calls=self.fake(inherited=False);logs=[]
+        broken=os.path.join(self.dirs[0],"Targets.json")
+        with mock.patch.object(sec,"_win_unreadable_paths",side_effect=lambda top:[broken] if top==self.dirs[0] else []):
+            self.assertEqual(1,sec._harden_windows_acls(self.dirs,run=run,log=logs.append))
+        resets=[c for c in calls if c[0]=="icacls" and "/reset" in c]
+        self.assertEqual([["icacls",os.path.join(self.dirs[0],"*"),"/reset","/T","/C","/Q"]],resets)
+        self.assertFalse([c for c in calls if "/inheritance:r" in c])
+    def test_unreadable_paths_finds_permission_errors(self):
+        path=os.path.join(self.dirs[0],"a.json")
+        with open(path,"w") as f:f.write("[]")
+        self.assertEqual([],sec._win_unreadable_paths(self.dirs[0]))
+        real_open=open
+        def deny(p,*a,**k):
+            if p==path:raise PermissionError(13,"denied",p)
+            return real_open(p,*a,**k)
+        with mock.patch("builtins.open",deny):
+            self.assertEqual([path],sec._win_unreadable_paths(self.dirs[0]))
     def test_already_hardened_is_left_alone(self):
         run,calls=self.fake(inherited=False)
         self.assertEqual(0,sec._harden_windows_acls(self.dirs,run=run))

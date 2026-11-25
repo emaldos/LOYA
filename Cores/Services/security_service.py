@@ -337,6 +337,26 @@ def _win_user_sid(run):
         sid=cells[-1].strip('"') if cells else ""
         if re.fullmatch(r"S-1-5-21(?:-\d+){4}|S-1-12-1(?:-\d+){4}|S-1-5-\d+(?:-\d+)*",sid):return sid
     return ""
+def _win_unreadable_paths(top):
+    unreadable=[]
+    def note_error(error):
+        if isinstance(error,PermissionError):unreadable.append(error.filename)
+    for folder,dirs,files in os.walk(top,onerror=note_error):
+        for name in files:
+            path=os.path.join(folder,name)
+            try:open(path,"rb").close()
+            except PermissionError:unreadable.append(path)
+            except OSError:pass
+    return unreadable
+def _win_repair_unreadable(top,run,log):
+    unreadable=_win_unreadable_paths(top)
+    if not unreadable:return 0
+    result=run(["icacls",os.path.join(top,"*"),"/reset","/T","/C","/Q"],capture_output=True,text=True,timeout=300,creationflags=_WIN_NO_WINDOW)
+    if result.returncode==0:
+        log(f"[sec] {top}: reset the ACL of {len(unreadable)} unreadable path(s) to inherit from the folder")
+        return 1
+    log(f"[sec] icacls could not reset {top} (exit {result.returncode}): {(result.stderr or result.stdout or '').strip()[:200]}")
+    return 0
 def _harden_windows_acls(dirs,run=None,log=None):
     """Windows counterpart of the chmod above. Only a folder that still inherits its ACL (an "(I)" entry in icacls output) is
     changed: inheritance is removed and full control is granted to the current user (by SID), SYSTEM and Administrators, in one
@@ -356,8 +376,10 @@ def _harden_windows_acls(dirs,run=None,log=None):
         try:
             cur=run(["icacls",top],capture_output=True,text=True,timeout=20,creationflags=_WIN_NO_WINDOW)
             if cur.returncode!=0:log(f"[sec] icacls could not read {top}: {(cur.stderr or cur.stdout or '').strip()[:200]}");continue
-            if "(I)" not in (cur.stdout or ""):continue
-            argv=["icacls",top,"/inheritance:r","/grant:r",f"*{sid}:(OI)(CI)F"]+[a for k in _WIN_KEEP_SIDS for a in ("/grant:r",f"{k}:(OI)(CI)F")]+["/T","/C","/Q"]
+            if "(I)" not in (cur.stdout or ""):
+                changed+=_win_repair_unreadable(top,run,log)
+                continue
+            argv=["icacls",top,"/inheritance:r","/grant:r",f"*{sid}:(OI)(CI)F"]+[a for k in _WIN_KEEP_SIDS for a in ("/grant:r",f"{k}:(OI)(CI)F")]+["/C","/Q"]
             r=run(argv,capture_output=True,text=True,timeout=300,creationflags=_WIN_NO_WINDOW)
             if r.returncode==0:changed+=1;log(f"[sec] {top}: owner-only ACL applied")
             else:log(f"[sec] icacls could not restrict {top} (exit {r.returncode}): {(r.stderr or r.stdout or '').strip()[:200]}")
