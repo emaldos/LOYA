@@ -980,7 +980,7 @@ class HttpNodeTests(Base):
         out=status["nodes"]["h"]["output"]
         self.assertEqual(["status","url","elapsed_ms","headers"],list(out["http"]));self.assertEqual(200,out["http"]["status"])
         self.assertEqual((response["body"],0,{"response"}),(out["stdout"],out["exit_code"],set(out["vars_set"])))
-        self.assertEqual("GET",_Handler.seen[0]["method"]);self.assertEqual("LOYA-NG/1.0.0",_Handler.seen[0]["headers"]["user-agent"])
+        self.assertEqual("GET",_Handler.seen[0]["method"]);self.assertEqual("LOYA-NG/1.0.1",_Handler.seen[0]["headers"]["user-agent"])
     def test_the_response_feeds_later_nodes(self):
         g=graph([self.http("/html"),node("r","regex",source="${response.body}",pattern=r"<title>([^<]+)",mode="first",group="1",var="title"),node("j","http",url=self.base+"/json",var="api",timeout=10),
                  node("t","template",template="${title}|${response.status}|${api.json.items[1]}|${api.headers.x-served-by}|${last.stdout}",var="line")],["start.out>h","h.success>r","r.out>j","j.success>t"])
