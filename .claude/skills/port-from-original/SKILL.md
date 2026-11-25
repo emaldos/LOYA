@@ -20,7 +20,7 @@ For each behaviour in the original (validation, defaults, sort/filter, dedup key
 1. Cite `orig file:line`.
 2. Find NG's equivalent and classify: **present & correct / present but different / missing**. Cite `NG file:line`.
 3. Check the full path is wired: button exists → `bridgeCall("x.y")` in `UI/js` → method on the API class in `Cores/Bridge/api.py` → service function. A Python function that exists but is never called counts as **missing**.
-4. Separate deliberate omissions (README states them) from undocumented gaps. Deliberately dropped features need the user's approval before building (they go into `NG-New-ideas.md`).
+4. Separate deliberate omissions (README states them) from undocumented gaps. Deliberately dropped features need the user's approval before building.
 
 Rank: high = data loss or core workflow broken; medium = noticeable behaviour difference; low = polish. Fix data-loss rows first.
 

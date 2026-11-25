@@ -591,7 +591,7 @@ The repository ships [Claude Code](https://claude.com/claude-code) skills in [`.
 
 ## Security
 
-- The latest security audit, its findings and their fixes and regression tests are in **[SECURITY-AUDIT.md](SECURITY-AUDIT.md)**.
+- The latest security audit, its findings and their fixes and regression tests are in **[docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md)**.
 - Use LOYA only against systems you are authorized to test; see [DISCLAIMER.md](DISCLAIMER.md) for what the optional AI features send and to whom.
 - Network features are opt-in, go only to fixed hosts over HTTPS, and are refused while the app is locked.
 - Please report vulnerabilities privately to the maintainer (for example through GitHub's private vulnerability reporting on the repository) rather than in a public issue.
@@ -673,4 +673,4 @@ LOYA NG is released under the **LOYA Note Community License (Honor-Based)**, a p
 
 "LOYA" stands for "Language Of Your Attack".
 
-**Links:** [Repository](https://github.com/emaldos/LOYA) | [Issues](https://github.com/emaldos/LOYA/issues) | [License](LICENSE) | [Disclaimer](DISCLAIMER.md) | [Security audit](SECURITY-AUDIT.md) | [MCP coverage](docs/MCP-COVERAGE.md) | [Original LOYA Note](https://github.com/emaldos/LOYA-Note)
+**Links:** [Repository](https://github.com/emaldos/LOYA) | [Issues](https://github.com/emaldos/LOYA/issues) | [License](LICENSE) | [Disclaimer](DISCLAIMER.md) | [Security audit](docs/SECURITY-AUDIT.md) | [MCP coverage](docs/MCP-COVERAGE.md) | [Original LOYA Note](https://github.com/emaldos/LOYA-Note)
