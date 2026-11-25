@@ -13,6 +13,7 @@ Rules for every tool here:
 """
 import json,re,threading
 from Cores.Services import ai_service as _ai
+from Cores.Services import ai_element_rules as _element_rules
 MAX_PAGE=200
 MAX_TEXT=40_000
 # ---------------------------------------------------------------- permissions (new keys; existing keys are reused where the tool fits)
@@ -471,7 +472,8 @@ def register(server,check):
     @server.prompt(name="loya-note-from-output",description="Turn pasted tool output into a structured LOYA note (summary, findings callouts, command blocks).")
     def prompt_note_from_output(output: str,title: str="") -> str:
         return ("Create a LOYA note"+(f" titled '{title}'" if title else "")+" from this output. Use notes_create; put each command that was run in a command block "
-                "(get the HTML from notes_command_block_html), summarise what was found, and mark anything sensitive as a credential callout instead of copying secrets.\n\n"+str(output or "")[:MAX_TEXT])
+                "(get the HTML from notes_command_block_html), summarise what was found, and mark anything sensitive as a credential callout instead of copying secrets. "
+                +_element_rules.ELEMENT_RULE_SHORT+"\n\n"+str(output or "")[:MAX_TEXT])
     @server.prompt(name="loya-finding-from-cve",description="Add a report finding from a CVE and tailor it to the engagement.")
     def prompt_finding_from_cve(report_id: str,cve_id: str) -> str:
         return (f"In report {report_id}, call findings_add_from_cve for {cve_id}. Then read the live target (targets_live_get) and the report (reports_get), "

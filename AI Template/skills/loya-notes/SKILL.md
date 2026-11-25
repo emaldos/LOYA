@@ -2,7 +2,7 @@
 name: loya-notes
 description: Write and organise structured penetration-test notes in LOYA - layout, runnable command blocks, finding and credential callouts, groups, attachments and history. Use when creating or extending notes.
 ---
-<!-- loya-skill-version: 1 -->
+<!-- loya-skill-version: 2 -->
 # Pentest notes in LOYA
 
 ## Before writing
@@ -17,7 +17,9 @@ One note per host, service or phase. For example "web01 - 443 HTTPS" in the grou
 4. `<h2>Next steps</h2>`: a `<ul>` of what to try next.
 
 ## Command blocks (runnable from the note)
-Never hand-write command block markup. For each command, call `notes_command_block_html` with `command`, `cmd_note_title`, `category`, `sub_category`, `tags` and `description`, then paste the returned HTML into the note. Use `{Placeholder}` names that `parameter_list` already has, such as `{IPv4}`, `{Port}`, `{URL}` or `{Domain}`. Add a new placeholder with `parameter_add` only when none fits.
+Never hand-write command block markup. For each command, call `notes_command_block_html` with `command`, `cmd_note_title`, `category`, `sub_category`, `tags` and `description`, then paste the returned HTML into the note. Call `parameter_list` before the first command and write every value that changes per target or per run as an element, as the rules below say.
+<!-- loya-element-rule -->
+- After `notes_create`, `notes_append` or `notes_update`, read `elements` in the result: `new` lists the elements the save registered, and `hardcoded` lists literal values that are still in a command, with the element to use instead. Fix those before you finish.
 
 ## Callouts
 - Finding:

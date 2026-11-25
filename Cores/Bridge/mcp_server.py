@@ -5,6 +5,7 @@ from Cores.Services import ai_service as _ai_svc
 from Cores.Services import terminal_service as _terminal_svc
 from Cores.Services import reports_service as _reports_svc
 from Cores.Services import report_ai as _report_ai_svc
+from Cores.Services import ai_element_rules as _element_rules
 def _lock_check():
     if _api._common_db.db_locked():raise ValueError("LOYA NG is locked. Unlock the app before using its tools.")
 def _check(name,args=None,defer_ask=False,force_ask=False):
@@ -16,11 +17,16 @@ def _live_resolver():
 def _missing_placeholders(text):
     import re
     return sorted(set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_ ]*)\}",text or "")))
+def _element_keys():return _element_rules.current_element_names()
+def _with_elements(result,commands,keys_before):
+    if not isinstance(result,dict):return result
+    try:return dict(result,elements=_element_rules.elements_report(commands,keys_before,_element_keys()))
+    except Exception:return result
 def _norm_tags(v):
     if isinstance(v,list):return ", ".join(str(t).strip() for t in v if str(t).strip())
     return v or ""
 def build_server():
-    server=MCPServer("LOYA NG",instructions="Tools for creating and managing notes, commands, targets and penetration-test reports (reports, their sections and findings, the Findings Library and captured evidence) in LOYA NG. Terminal tools may also be available; they are off unless the operator has granted them, and terminal_run only queues a command for human approval rather than executing it.")
+    server=MCPServer("LOYA NG",instructions="Tools for creating and managing notes, commands, targets and penetration-test reports (reports, their sections and findings, the Findings Library and captured evidence) in LOYA NG. Terminal tools may also be available; they are off unless the operator has granted them, and terminal_run only queues a command for human approval rather than executing it.\n\n"+_element_rules.element_rule_text())
     notes_api=_api.NotesAPI()
     commands_api=_api.CommandsAPI()
     targets_api=_api.TargetsAPI()
@@ -32,19 +38,22 @@ def build_server():
     def notes_get(note_id: int) -> dict:
         _check("notes_get",locals())
         return notes_api.get(note_id)
-    @server.tool(description="Create a new note. content is HTML. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted). To include a runnable command block in content, call notes_command_block_html first and paste its returned snippet in - do not hand-write command block HTML.")
+    @server.tool(description="Create a new note. content is HTML. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted). To include a runnable command block in content, call notes_command_block_html first and paste its returned snippet in - do not hand-write command block HTML. The result has elements: the elements the commands use, the new ones this save registered, and any hard-coded value to replace. "+_element_rules.ELEMENT_RULE_SHORT)
     def notes_create(name: str,content: str,group: str="",tags: str|list="") -> dict:
         _check("notes_create",locals())
-        return notes_api.save(None,name,group,content,[],_norm_tags(tags))
-    @server.tool(description="REPLACE an existing note's entire name/content/group/tags with the values given - anything not repeated here is lost. To add new material to a note without erasing what's already there, use notes_append instead. tags is a comma-separated string (a list of strings is also accepted).")
+        keys_before=_element_keys()
+        return _with_elements(notes_api.save(None,name,group,content,[],_norm_tags(tags)),_element_rules.commands_in_note_html(content),keys_before)
+    @server.tool(description="REPLACE an existing note's entire name/content/group/tags with the values given - anything not repeated here is lost. To add new material to a note without erasing what's already there, use notes_append instead. tags is a comma-separated string (a list of strings is also accepted). The result has elements, as for notes_create. "+_element_rules.ELEMENT_RULE_SHORT)
     def notes_update(note_id: int,name: str,content: str,group: str="",tags: str|list="") -> dict:
         _check("notes_update",locals())
-        return notes_api.save(note_id,name,group,content,[],_norm_tags(tags))
-    @server.tool(description="Append new HTML content to the END of an existing note, keeping everything already in it (including any command blocks). Use this whenever the user asks to add/append something to a note they already have - do NOT use notes_update for that, it would erase the existing content.")
+        keys_before=_element_keys()
+        return _with_elements(notes_api.save(note_id,name,group,content,[],_norm_tags(tags)),_element_rules.commands_in_note_html(content),keys_before)
+    @server.tool(description="Append new HTML content to the END of an existing note, keeping everything already in it (including any command blocks). Use this whenever the user asks to add/append something to a note they already have - do NOT use notes_update for that, it would erase the existing content. The result has elements, as for notes_create. "+_element_rules.ELEMENT_RULE_SHORT)
     def notes_append(note_id: int,content: str) -> dict:
         _check("notes_append",locals())
-        return notes_api.append(note_id,content)
-    @server.tool(description="Get the exact HTML snippet for one runnable command block, to embed directly inside the content string passed to notes_create/notes_update/notes_append. Call this once per command you want to include - never hand-write the command block markup yourself, it has an internal encoded format that must be generated by this tool.")
+        keys_before=_element_keys()
+        return _with_elements(notes_api.append(note_id,content),_element_rules.commands_in_note_html(content),keys_before)
+    @server.tool(description="Get the exact HTML snippet for one runnable command block, to embed directly inside the content string passed to notes_create/notes_update/notes_append. Call this once per command you want to include - never hand-write the command block markup yourself, it has an internal encoded format that must be generated by this tool. Call parameter_list before writing the first command. "+_element_rules.ELEMENT_RULE_SHORT)
     def notes_command_block_html(command: str,cmd_note_title: str="",category: str="",sub_category: str="",tags: str|list="",description: str="") -> str:
         _check("notes_command_block_html",locals())
         return notes_api.command_block_html(cmd_note_title,category,sub_category,command,_norm_tags(tags),description)
@@ -56,23 +65,31 @@ def build_server():
     def commands_list() -> list:
         _check("commands_list",locals())
         return commands_api.list()
-    @server.tool(description="Create a new standalone command entry. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted).")
+    @server.tool(description="Create a new standalone command entry. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted). Call parameter_list first. The result has elements: the elements the command uses, the new ones this save registered, and any hard-coded value to replace. "+_element_rules.ELEMENT_RULE_SHORT)
     def commands_create(note_name: str,category: str,sub_category: str,command: str,tags: str|list="",description: str="") -> dict:
         _check("commands_create",locals())
-        return commands_api.create(note_name,category,sub_category,command,_norm_tags(tags),description)
-    @server.tool(description="Update an existing standalone command entry by id. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted).")
+        keys_before=_element_keys()
+        return _with_elements(commands_api.create(note_name,category,sub_category,command,_norm_tags(tags),description),[command],keys_before)
+    @server.tool(description="Update an existing standalone command entry by id. tags is a comma-separated string, e.g. \"recon, web\" (a list of strings is also accepted). The result has elements, as for commands_create. "+_element_rules.ELEMENT_RULE_SHORT)
     def commands_update(cmd_id: int,note_name: str,category: str,sub_category: str,command: str,tags: str|list="",description: str="") -> dict:
         _check("commands_update",locals())
-        return commands_api.update(cmd_id,note_name,category,sub_category,command,_norm_tags(tags),description)
+        keys_before=_element_keys()
+        return _with_elements(commands_api.update(cmd_id,note_name,category,sub_category,command,_norm_tags(tags),description),[command],keys_before)
     @server.tool(description="Delete a standalone command entry by id.")
     def commands_delete(cmd_id: int) -> bool:
         _check("commands_delete",locals())
         return commands_api.delete(cmd_id,"CommandsNotes")
-    @server.tool(description="List all target parameters (placeholder keys) with priority and manual flag.")
+    @server.tool(description="List the elements (target parameters, the {Name} placeholder keys that commands use) with priority, manual flag, links and meaning (what the name stands for, e.g. IP address for IPv4, IP or RHOST). Call this before writing any command in a note or a standalone command, and reuse an element that means the same thing instead of a literal value or a near-duplicate name.")
     def parameter_list() -> list:
         _check("parameter_list",locals())
-        return targets_api.keys()
-    @server.tool(description="Register a new target parameter (placeholder key), e.g. IP, URL Path.")
+        return _element_rules.describe_elements(targets_api.keys())
+    @server.tool(description="Match the element names you plan to use in commands, e.g. [\"IP\",\"Ports\",\"wordlist\"], against the elements that already exist, by meaning and not only by spelling. For each name it returns the element to write ({RHOST} when that element already holds the IP address), whether it exists and what it means. A name that matches nothing comes back as a clean new element name, which is registered when the note or command is saved.")
+    def parameter_match(names: list|str) -> list:
+        _check("parameter_match",locals())
+        items=[n.strip() for n in names.split(",")] if isinstance(names,str) else [str(n or "").strip() for n in names or []]
+        keys=_element_keys()
+        return [_element_rules.match_element(n,keys) for n in items[:100] if n]
+    @server.tool(description="Register a new element (target parameter, placeholder key), e.g. IPv4, Ports, URL. Check parameter_list first: when an element with the same meaning exists, use that one instead. Elements a saved note or command uses are registered automatically.")
     def parameter_add(key: str,priority: int=0) -> bool:
         _check("parameter_add",locals())
         return targets_api.add_key(key,priority)

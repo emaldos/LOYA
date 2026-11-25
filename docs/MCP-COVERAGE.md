@@ -22,6 +22,7 @@ Coverage, before and after S31:
 - MCP tools: **55 → 112**. That is 49 app-wide tools from S31 plus the Chains team's chain-diagram tools.
 - After S31: 6 Chain History tools (run history list, run, log, export, import, delete). Total: **118**.
 - Chains studio: 7 chain diagram tools (`chain_node_types`, `chain_validate`, `chain_node_add`, `chain_node_set`, `chain_node_delete`, `chain_connect`, `chain_run_output`). Total: **125**. They use the existing Chain Diagrams > Read and Edit permissions; no new AI Roles entity was added.
+- Elements: 1 tool (`parameter_match`) that maps the element names an AI plans to write onto the elements that already exist, by meaning. Total: **126**. It uses the existing Parameter > Read permission.
 - MCP resources: 0 → 3.
 - MCP prompts: 0 → 2.
 - User-facing features covered: about 45% → about 85%. The rest are operator-only by design.
@@ -55,6 +56,7 @@ Coverage, before and after S31:
 | Targets | Profiles: list, create, switch | `target_profiles_list`, `target_profile_create`, `target_profile_switch` | `targets_read/add/edit` | new |
 | Targets | Profile rename/delete, CIDR expand, key pattern, bulk rename | - | - | operator only (bulk or destructive) |
 | Parameters | List / add / rename / remove | `parameter_*` | `parameter_*` | yes |
+| Parameters | Elements by meaning: `parameter_list` adds a `meaning` to each element, `parameter_match` maps planned names (IP, Ports, wordlist) onto existing elements such as `{RHOST}`, and the note and command write tools return `elements` (used, new, hard-coded values to replace) | `parameter_list`, `parameter_match`, `notes_create`, `notes_update`, `notes_append`, `commands_create`, `commands_update` | `parameter_read` | new (the element rule text lives in `Cores/Services/ai_element_rules.py`) |
 | Reports | List / get / create / update / delete | `reports_*` | `reports_*` | yes |
 | Reports | Sections add / update | `report_section_add`, `report_section_update` | `reports_add/edit` | yes |
 | Reports | Findings add / update / delete / list | `findings_*` | `reports_*` | yes |
@@ -167,6 +169,7 @@ The Default column is the out-of-the-box level for a fresh install. A preset or 
 | `notes_versions` | `notes_read` | Notes > Read | Allow | yes |
 | `parameter_add` | `parameter_add` | Parameter > Add | Allow |  |
 | `parameter_list` | `parameter_read` | Parameter > Read | Allow |  |
+| `parameter_match` | `parameter_read` | Parameter > Read | Allow |  |
 | `parameter_remove` | `parameter_delete` | Parameter > Delete | Deny |  |
 | `parameter_update` | `parameter_edit` | Parameter > Edit | Allow |  |
 | `quickrun_favorite_set` | `quickrun_edit` | Quick Run > Edit | Ask | yes |

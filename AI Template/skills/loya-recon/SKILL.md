@@ -2,7 +2,7 @@
 name: loya-recon
 description: Run reconnaissance through LOYA with human approval - pick commands from Quick Run or the command library, queue them on the terminal, read the results, and turn them into notes, targets and findings. Use for scanning and enumeration tasks.
 ---
-<!-- loya-skill-version: 1 -->
+<!-- loya-skill-version: 2 -->
 # Recon with approval
 
 You cannot run anything directly. Every command is a request that the operator approves in LOYA. Plan so each approval is worth it.
@@ -27,7 +27,7 @@ You cannot run anything directly. Every command is a request that the operator a
 
 ## 4. Record what you learned
 - Parse the output into facts: open ports, services, versions, users, shares, vulnerabilities.
-- Append them to the host's note (`loya-notes` skill), with the command that produced them as a command block.
+- Append them to the host's note (`loya-notes` skill), with the command that produced them as a command block. In that saved command, write the values that change per target or per run (IP, ports, URL, wordlist, user, output file) as elements, reusing the names from `parameter_list` (see `loya-basics`), so the operator can run it again on another target.
 - Update target values (`targets_update`) with discovered data that later commands need, e.g. a domain or a web root.
 - Real vulnerabilities become finding callouts in the note, and report findings when a report exists (`loya-reporting`).
 - Save important raw output as evidence with `report_evidence_add_text`.

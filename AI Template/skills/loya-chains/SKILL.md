@@ -2,7 +2,7 @@
 name: loya-chains
 description: Use and build LOYA Action Chains - multi-step flows of commands, HTTP requests, parsers, loops and branches - list and run existing chains with approval, build and validate chain diagrams for the operator to review, and read run results. Use for repeatable recon or post-exploitation workflows.
 ---
-<!-- loya-skill-version: 4 -->
+<!-- loya-skill-version: 5 -->
 # Action Chains
 
 An Action Chain is a saved flow of command steps that LOYA runs in the terminal. The operator can also start it from the AI panel by typing `/<caller>`.
@@ -39,7 +39,7 @@ Call `chain_node_types` for the list and `chain_node_types(type="http")` for one
 A node whose port is named fail or error takes that port when it fails. If nothing is connected there the run stops, unless `settings.on_error` is `"continue"`.
 
 ### Values
-- `{IPv4}`, `{Host}`, `{URL}`: target placeholders, filled from the operator's live target. Use them for anything about the target; never hard-code an address.
+- `{IPv4}`, `{Host}`, `{URL}`: target placeholders (elements), filled from the operator's live target. Use them for anything about the target and for every value that changes per run (ports, wordlists, users, output files); never hard-code an address. Call `parameter_list` first and reuse an element that means the same thing, whatever its name (`{RHOST}` for an IP, for example).
 - `${name}`, `${last.stdout}`, `${last.parsed}`, `${nodes.n2.stdout}`, `${item}`, `${index}`, `${target.ipv4}`: flow values. In a command line they are shell-quoted for you. Never use `${raw:...}`.
 - A node with a `var` field stores its result in that variable: `${scan.open_ports}`, `${response.status}`, `${response.json.items[0].name}`.
 - A config value that is exactly one `${...}` keeps lists and objects as they are, so `"items":"${scan.ports}"` loops over the real list.

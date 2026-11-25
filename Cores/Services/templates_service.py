@@ -1,4 +1,5 @@
 import json,zipfile,os
+from Cores.Services import ai_element_rules as _element_rules
 def _json_template(obj):return json.dumps(obj,ensure_ascii=False,indent=2)+"\n"
 def _ai_template_root():
     return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),"..","..","AI Template"))
@@ -54,15 +55,14 @@ def _ai_knowledge_block():
         keys=_targets_svc.Store().ordered_keys()
     except Exception:
         pass
-    if not (cats or tags or keys):return ""
-    lines=["Prefer these existing names over inventing new ones. Only create a new category, sub category, tag, or target key if nothing below reasonably fits."]
+    lines=[]
+    if cats or tags:lines.append("Prefer these existing names over inventing new ones. Only create a new category, sub category or tag if nothing below reasonably fits.")
     if cats:
         cat_lines=[c+(" ("+", ".join(submap.get(c) or [])+")" if submap.get(c) else "") for c in cats]
         lines.append("Existing categories (with sub categories): "+"; ".join(cat_lines)+".")
     if tags:
         lines.append("Existing tags: "+", ".join(tags)+".")
-    if keys:
-        lines.append("Existing target parameter keys: "+", ".join(keys)+". In example/generated commands, replace literal IP addresses, hostnames, URLs, ports, usernames, and similar values with a matching {key} placeholder from this list (e.g. write \"nmap {IP}\" instead of \"nmap 192.168.1.5\") whenever the value clearly corresponds to one of these keys.")
+    lines.append(_element_rules.element_rule_for_template(keys))
     return " ".join(lines)
 def _inject_knowledge(text,knowledge):
     if not knowledge:return text

@@ -346,7 +346,7 @@ for _key,_entity,_action,_tools,_shell in (
     ("targets_add","Targets","Add",["targets_add"],False),
     ("targets_edit","Targets","Edit",["targets_update"],False),
     ("targets_delete","Targets","Delete",["targets_remove"],False),
-    ("parameter_read","Parameter","Read",["parameter_list"],False),
+    ("parameter_read","Parameter","Read",["parameter_list","parameter_match"],False),
     ("parameter_add","Parameter","Add",["parameter_add"],False),
     ("parameter_edit","Parameter","Edit",["parameter_update"],False),
     ("parameter_delete","Parameter","Delete",["parameter_remove"],False),

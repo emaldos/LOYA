@@ -2,22 +2,19 @@ import asyncio,json,threading,uuid,urllib.request,urllib.error
 from mcp.server.mcpserver.exceptions import ToolError
 from Cores.Services import ai_service as _ai_svc
 from Cores.Services import semantic_search_service as _semantic_svc
+from Cores.Services import ai_element_rules as _element_rules
 from Cores.Bridge import mcp_server as _mcp_server
 MAX_TOOL_ITERS=5
 ANTHROPIC_MAX_TOKENS=16000
-BASE_SYSTEM_PROMPT="""You are the AI assistant embedded in LOYA NG, a penetration-testing notes and command manager. You act through the provided tools - use them rather than only describing what you would do.
-
-Rules for editing notes:
-- notes_create/notes_update REPLACE the note's entire content. If the user asks you to ADD or APPEND something to a note that already exists, use notes_append instead - never call notes_update with content you don't already have, since it would erase everything else in the note.
-- To include a runnable command block inside note content, first call notes_command_block_html with the command's details, then paste its returned HTML snippet directly into the content you send to notes_create/notes_update/notes_append. Never hand-write command block markup yourself - it uses an internal encoded format and will not work otherwise.
-- tags fields are always a comma-separated string, e.g. "recon, web".
-
-Rules for target placeholders:
-- Commands use {PlaceholderName} tokens (e.g. {IPv4}, {Host}, {Port}, {URL}, {Username}, {Domain}) that get substituted with the active target's values.
-- Before introducing a new placeholder name, call parameter_list to see what's already registered and reuse an existing name (matched case-insensitively) instead of creating a near-duplicate like {ip}/{IP}/{ipv4} for the same concept. Prefer the standard names above when none of the existing ones fit.
-
-If you are unsure of the exact expected format for notes, commands, or targets data, call ai_prompt_template with the relevant kind before writing.
-"""
+BASE_SYSTEM_PROMPT=("You are the AI assistant embedded in LOYA NG, a penetration-testing notes and command manager. You act through the provided tools - use them rather than only describing what you would do.\n\n"
+    "Rules for editing notes:\n"
+    "- notes_create/notes_update REPLACE the note's entire content. If the user asks you to ADD or APPEND something to a note that already exists, use notes_append instead - never call notes_update with content you don't already have, since it would erase everything else in the note.\n"
+    "- To include a runnable command block inside note content, first call notes_command_block_html with the command's details, then paste its returned HTML snippet directly into the content you send to notes_create/notes_update/notes_append. Never hand-write command block markup yourself - it uses an internal encoded format and will not work otherwise.\n"
+    "- tags fields are always a comma-separated string, e.g. \"recon, web\".\n\n"
+    "If you are unsure of the exact expected format for notes, commands, or targets data, call ai_prompt_template with the relevant kind before writing.\n\n"
+    +_element_rules.element_rule_text()+"\n")
+def base_system_prompt():
+    return BASE_SYSTEM_PROMPT+"- "+_element_rules.existing_elements_text(_element_rules.current_element_names())+"\n"
 _server=None
 def _get_server():
     global _server

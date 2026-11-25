@@ -495,6 +495,7 @@ class NotesAPI(BridgeModule):
         combined=_notes_svc.prepare_note_html(_notes_svc.sanitize_note_html(existing+addition),note["note_name"],dbp)
         nid,ncmd,action=_notes_svc.save_note(dbp,note_id,note["note_name"],note["group_name"],combined,None,note.get("tags",""))
         _semantic_svc.index_note(nid,note["note_name"],_notes_svc._strip_html(combined))
+        _targets_svc.auto_add_target_values()
         return {"id":nid,"action":action,"command_count":ncmd}
     def command_block_html(self,cmd_note_title,category,sub_category,command,tags="",description=""):
         command=(command or "").strip()

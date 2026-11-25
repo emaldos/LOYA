@@ -17,6 +17,7 @@ from datetime import datetime,timezone
 from Cores import common_db as _common_db
 from Cores.settings_lock import SETTINGS_LOCK as _settings_lock
 from Cores.Services import ai_service as _ai
+from Cores.Services import ai_element_rules as _element_rules
 from Cores import doc_store as _doc_store
 PROVIDERS=("claude","codex")
 PROVIDER_LABELS={"claude":"Claude Agent","codex":"OpenAI Codex"}
@@ -639,7 +640,7 @@ def bundled_skill_sources():
     for name in sorted(os.listdir(root)):
         p=os.path.join(root,name,"SKILL.md")
         if not os.path.isfile(p) or not _NAME_RX.match(name):continue
-        with open(p,"rb") as f:data=f.read()
+        with open(p,"rb") as f:data=_element_rules.expand_skill_text(f.read().decode("utf-8")).encode("utf-8")
         fm=_frontmatter(p)
         m=_VERSION_RX.search(data.decode("utf-8","replace"))
         out.append({"name":fm.get("name") or name,"dir":name,"description":(fm.get("description") or "")[:200],"version":int(m.group(1)) if m else 0,"data":data})
@@ -740,7 +741,7 @@ def _ensure_mcp():
 def system_prompt(provider):
     try:
         from Cores.Services import ai_chat_service as _chat
-        base=_chat.BASE_SYSTEM_PROMPT
+        base=_chat.base_system_prompt()
     except Exception:
         base=""
     return (f"You are {PROVIDER_LABELS[provider]}, an external agent running inside LOYA NG, a penetration-testing notes and command manager. "
