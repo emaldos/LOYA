@@ -6,16 +6,16 @@
 
 **A local-first desktop workspace for penetration testers: notes, commands, targets, automation, reporting and CVE intel in one app.**
 
-This repository is **LOYA NG** (version 1.0.0), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
+This repository is **LOYA NG** (version 1.0.1), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
 
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational.svg)](#quick-start)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
-[![Version](https://img.shields.io/badge/version-1.0.0-blueviolet.svg)](Cores/Update/CurrentVersion.info)
+[![Version](https://img.shields.io/badge/version-1.0.1-blueviolet.svg)](Cores/Update/CurrentVersion.info)
 [![License](https://img.shields.io/badge/license-LOYA%20Community%20%28honor--based%29-green.svg)](LICENSE)
 
 </div>
 
-![LOYA NG dashboard with demo data](docs/screenshots/dashboard.png)
+![LOYA NG dashboard with demo data](Docs/screenshots/dashboard.png)
 
 > **Disclaimer:** LOYA NG is open source and public. Only the official repository is maintained by the author; forks and modified copies are not the author's responsibility. Use it only on systems you are authorized to test. Optional AI features send the content you share to the provider you choose. See [DISCLAIMER.md](DISCLAIMER.md).
 
@@ -47,7 +47,7 @@ LOYA NG is a native desktop window (via [pywebview](https://pywebview.flowrl.com
 | [Backups](#backups-import-and-export) | Manual and scheduled backups, restore, Export / Import All, per-type import and export |
 
 <p align="center">
-  <img src="docs/screenshots/notes.png" alt="Notes page with demo data" width="900">
+  <img src="Docs/screenshots/notes.png" alt="Notes page with demo data" width="900">
 </p>
 
 > All screenshots use made-up demo data (ACME Demo Corp, `demo.example.com`, documentation IP ranges).
@@ -327,7 +327,7 @@ This product uses data from the NVD API but is not endorsed or certified by the 
 ### AI: Claude Code, Codex and MCP
 
 - **Bring your own CLI**: Settings > AI > Agents > **Connections** detects your installed official **Claude Code** (`claude`) or **Codex** (`codex`) CLI. You sign in inside the official CLI yourself (LOYA never touches its credentials); **Connect to LOYA** registers LOYA's MCP server with the CLI's own command (`claude mcp add --scope user ... loya-note` / `codex mcp add loya-note ...`) through a small stdio bridge (`Cores/Bridge/mcp_cli_bridge.py`), and installs the bundled LOYA skills.
-- **Local MCP server**: 112 tools plus resources and prompts covering Notes, Reports, Commands, Targets, Chains, CVE Intel and more ([docs/MCP-COVERAGE.md](docs/MCP-COVERAGE.md)). It listens on `127.0.0.1` only and needs a bearer token.
+- **Local MCP server**: 126 tools plus resources and prompts covering Notes, Reports, Commands, Targets, Chains, CVE Intel and more ([Docs/MCP-COVERAGE.md](Docs/MCP-COVERAGE.md)). It listens on `127.0.0.1` only and needs a bearer token.
 - **AI Roles** (Settings > AI > Roles): gates every tool for every client, connected CLIs included. Allow / Ask / Deny per entity and action, with Read-only, Assistant, Full and Custom presets. Deletes, shell access and secret reads are denied by default; **Ask** shows an approval prompt in the app; every call is audit-logged.
 - **External Agents** (Settings > AI > Agents, off by default): Claude Agent (Claude Agent SDK with your Anthropic API key) and OpenAI Codex (with your OpenAI API key) inside the AI panel, each run in an isolated process and workspace.
 - The in-app AI panel also supports Ollama, LM Studio, hosted APIs and external MCP providers.
@@ -344,7 +344,7 @@ Settings > AI > Roles (the **AI** tab has two sub-tabs, **Roles** and **Agents**
   - **Targets > Secrets** (`targets_secret_values`). Everywhere else, target values that look like passwords, hashes, tokens or keys are shown as hidden.
   - **Audit Log > Read** (`audit_log_read`, redacted).
 - **App > Read** covers `app_context`, `app_search` and `dashboard_stats`. **Quick Run > Edit** (pinning favourites) is Ask by default.
-- What an AI can reach is listed feature by feature, with each tool's permission key and default, in [docs/MCP-COVERAGE.md](docs/MCP-COVERAGE.md). There are 112 tools, plus resources (`loya://app/context`, `loya://targets/live`, `loya://reports/{id}/outline`) and two prompts.
+- What an AI can reach is listed feature by feature, with each tool's permission key and default, in [Docs/MCP-COVERAGE.md](Docs/MCP-COVERAGE.md). There are 126 tools, plus resources (`loya://app/context`, `loya://targets/live`, `loya://reports/{id}/outline`) and two prompts.
 - Every MCP tool:
   - goes through the same services as the UI, so validation, note history, the Recycle Bin and the audit log all apply;
   - pages its lists and caps long text;
@@ -539,13 +539,15 @@ LOYA/
 ├── AI Template/             AI prompt templates and the bundled LOYA skills (skills/)
 ├── tools/build_cve_index.py Maintainer tool that builds the offline CVE index
 ├── tests/                   Python (unittest) and Node (tests/js) suites
-├── docs/                    MCP coverage map and screenshots
+├── Docs/                    Developer guides, security audit, MCP coverage map and screenshots
 └── .claude/skills/          Claude Code skills for working on this repository
 ```
 
 Created at runtime and never committed: `Data/` (database, settings, stores), `Logs/`, `Backups/` and the virtual environments.
 
 ## Development and tests
+
+**Working on the code?** Start with the developer docs in [Docs/](Docs/README.md): architecture, subsystem internals, the development workflow and the project history.
 
 The regression suites are pure logic: no GUI, no running app and no venv required. The Python tests are plain `unittest`, so they run with any Python 3.10+ and are also collected by `pytest` if you prefer it (`pytest` is a dev-only dependency and is not in `Requirements.json`).
 
@@ -577,7 +579,7 @@ A WSL pass is not a Linux pass. It covers the kernel-level behaviour above, but 
 Issues and pull requests are welcome at [github.com/emaldos/LOYA](https://github.com/emaldos/LOYA). A few house rules:
 
 - **Windows and Linux both.** Every change must work on both platforms; gate platform-specific code and keep the other platform's behaviour unchanged.
-- **The version stays 1.0.0** until the first release: do not bump `CurrentVersion.info` or `DEFAULT_APP_VERSION`.
+- **Version changes are deliberate.** The version in development is 1.0.1; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
 - **LF line endings.** Do not commit files whose only change is CRLF churn.
 - Add a regression test for every fix (Python in `tests/`, browser-side logic in `tests/js/`).
 
@@ -585,13 +587,13 @@ The repository ships [Claude Code](https://claude.com/claude-code) skills in [`.
 
 | Skill | Use it to |
 |---|---|
-| [`ng-quality-gate`](.claude/skills/ng-quality-gate/SKILL.md) | **Run before every commit:** `.claude/skills/ng-quality-gate/scripts/gate.sh` runs both test suites, flags CRLF churn, checks the version was not bumped and refuses to stage data or secrets. Stage files by name, never `git add -A`. |
+| [`ng-quality-gate`](.claude/skills/ng-quality-gate/SKILL.md) | **Run before every commit:** `.claude/skills/ng-quality-gate/scripts/gate.sh` runs both test suites, flags CRLF churn, checks the version was not changed by accident and refuses to stage data or secrets. Stage files by name, never `git add -A`. |
 | [`linux-ui-audit`](.claude/skills/linux-ui-audit/SKILL.md) | Launch the app under a harness, drive it, query the live DOM and screenshot it, with a checklist of WebKitGTK pitfalls. `seed_demo.py` fills a data folder with fake demo data (the screenshots in this README come from it). |
 | [`port-from-original`](.claude/skills/port-from-original/SKILL.md) | Compare a feature with the original [LOYA Note](https://github.com/emaldos/LOYA-Note), which is the behaviour spec, and port what is missing. |
 
 ## Security
 
-- The latest security audit, its findings and their fixes and regression tests are in **[docs/SECURITY-AUDIT.md](docs/SECURITY-AUDIT.md)**.
+- The latest security audit, its findings and their fixes and regression tests are in **[Docs/SECURITY-AUDIT.md](Docs/SECURITY-AUDIT.md)**.
 - Use LOYA only against systems you are authorized to test; see [DISCLAIMER.md](DISCLAIMER.md) for what the optional AI features send and to whom.
 - Network features are opt-in, go only to fixed hosts over HTTPS, and are refused while the app is locked.
 - Please report vulnerabilities privately to the maintainer (for example through GitHub's private vulnerability reporting on the repository) rather than in a public issue.
@@ -658,12 +660,13 @@ Never include: `Data/`, `Logs/`, `Backups/`, `.venv_windows/`, `.venv_linux/`, `
 <details>
 <summary><b>Version history</b></summary>
 
+- **1.0.1**: fixes the Windows data hardening that could lock users out of their own `Data/` files (installs hit by it repair themselves on the next start), makes every AI write changeable command values as `{Element}` placeholders that reuse existing elements, adds full terminal mode with xterm.js (Claude Code, Codex, vim and htop run inside LOYA tabs), a terminal right click menu, crash diagnostics, a launcher startup screen, demo chain diagrams, smoother CLI connection setup and the developer docs in `Docs/`.
 - **1.0.0** (LOYA NG): resets the version numbering to mark the first stable release under the NG name. Its feature set is a strict superset of everything through 6.0.0 below. New since 6.0.0: real encryption at rest, freeform tags, a backlinks / note graph view, a resizable Terminal extension (CMD / PowerShell / shell sessions with in-app elevation), and a resizable AI extension (Ollama / LM Studio / hosted-API / external-MCP provider connections, live chat with tool-calling, an MCP server exposing the app's own operations as tools for any MCP client, and a granular AI Roles & Permissions system with Delete off by default), plus Reporting, Chain Diagrams and CVE Intel.
 - **6.0.0** replaced the PyQt6 desktop UI with a local HTML/CSS/JS interface rendered in its own native window via `pywebview`, plus a customizable Dashboard. Every other feature area carried over with full functional parity, with one deliberate exception: the original's Notes/Commands HTML, PDF and structured-Markdown import-export formats (Qt-dependent) were retired. Linux/WebKitGTK was implemented and confirmed on real Linux hardware (Kali rolling, XFCE on X11 with xfwm4).
 - **5.1.2** was a bug-fix patch: the launcher's already-running check no longer terminates the open app on Windows, stale PID files are detected and cleaned up, theme icon paths work from any working directory, page modules load under unique names, deprecated `datetime.utcnow()` usage was removed, and `cryptography` was updated from 42.0.5 to 48.0.1.
 - **5.1.1** was a quality and compatibility release: sortable columns across all tables, Linux bug fixes, correct `{PLACEHOLDER}` detection that ignores shell `{}` and JSON braces, a themed update screen, and launcher improvements (log rotation, deps fingerprint cache, `--skip-update`, already-running detection, broken venv auto-cleanup).
 
-**The 6.0.0 -> 1.0.0 version reset.** The updater only ever offers or accepts a release whose version compares strictly greater than the installed one (`compare_semver` in `Cores/Update/update_service.py`). Going from `6.0.0` down to `1.0.0` is therefore a downgrade as far as that comparison is concerned, so an install still on a `5.x`/`6.0.0` build will never see `1.0.0` offered through the in-app updater. This is deliberate: the `6.x` -> `1.0` jump is a one-time fresh install. From `1.0.0` onward, normal semver comparisons apply.
+**The 6.0.0 -> 1.0.0 version reset.** The updater only ever offers or accepts a release whose version compares strictly greater than the installed one (`compare_semver` in `Cores/Update/update_helpers.py`). Going from `6.0.0` down to `1.0.0` is therefore a downgrade as far as that comparison is concerned, so an install still on a `5.x`/`6.0.0` build will never see `1.0.0` offered through the in-app updater. This is deliberate: the `6.x` -> `1.0` jump is a one-time fresh install. From `1.0.0` onward, normal semver comparisons apply.
 
 </details>
 
@@ -673,4 +676,4 @@ LOYA NG is released under the **LOYA Note Community License (Honor-Based)**, a p
 
 "LOYA" stands for "Language Of Your Attack".
 
-**Links:** [Repository](https://github.com/emaldos/LOYA) | [Issues](https://github.com/emaldos/LOYA/issues) | [License](LICENSE) | [Disclaimer](DISCLAIMER.md) | [Security audit](docs/SECURITY-AUDIT.md) | [MCP coverage](docs/MCP-COVERAGE.md) | [Original LOYA Note](https://github.com/emaldos/LOYA-Note)
+**Links:** [Repository](https://github.com/emaldos/LOYA) | [Issues](https://github.com/emaldos/LOYA/issues) | [License](LICENSE) | [Disclaimer](DISCLAIMER.md) | [Security audit](Docs/SECURITY-AUDIT.md) | [MCP coverage](Docs/MCP-COVERAGE.md) | [Original LOYA Note](https://github.com/emaldos/LOYA-Note)
