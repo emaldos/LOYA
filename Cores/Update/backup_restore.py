@@ -167,6 +167,9 @@ def _skip_backup_dir(base,name,data_dir,bdir):
     temporary snapshot folder), plus the backups folder itself wherever it sits under Data/ (no backup inside a backup)."""
     full=os.path.normcase(os.path.abspath(os.path.join(base,name)))
     if bdir is not None and full==os.path.normcase(os.path.abspath(str(bdir))):return True
+    # Data/external_agents/connections holds the bearer tokens that let a connected Claude Code / Codex CLI call LOYA NG's
+    # tools. They are machine-local secrets: never put them in a backup or an export (reconnect after a restore instead).
+    if full==os.path.normcase(os.path.abspath(os.path.join(str(data_dir),"external_agents","connections"))):return True
     if os.path.abspath(base)!=os.path.abspath(str(data_dir)):return False
     return name in _SKIP_BACKUP_TOP or name.startswith(".loya_backup_")
 def create_data_backup(progress=None,prefix="Backup",root_dir=None,out_dir=None):

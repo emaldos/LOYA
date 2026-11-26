@@ -146,6 +146,36 @@ class PlainBackupTest(Base):
         try:counts=db_driver.row_counts(con)
         finally:con.close()
         self.assertEqual((1,2,3),(counts["ChainGraphs"],counts["ChainRuns"],counts["ChainRunLogs"]))
+class ConnectionTokensStayOutTest(Base):
+    """Data/external_agents/connections/*.json hold the bearer tokens a connected Claude Code / Codex CLI uses to call
+    LOYA NG's tools. They must never end up in a backup or an Export All zip."""
+    def _tokens(self):
+        d=os.path.join(self.dir,"external_agents","connections");os.makedirs(d,exist_ok=True)
+        for tool in ("claude_code","codex_cli"):
+            with open(os.path.join(d,tool+".json"),"w",encoding="utf-8") as fh:fh.write('{"token":"SECRET-TEST-TOKEN"}')
+        os.makedirs(os.path.join(self.dir,"external_agents","other"),exist_ok=True)
+        with open(os.path.join(self.dir,"external_agents","other","keep.json"),"w") as fh:fh.write("{}")
+    def _check(self,out):
+        with zipfile.ZipFile(out) as z:
+            names=z.namelist()
+            self.assertFalse([n for n in names if "external_agents/connections" in n.replace("\\","/")],names)
+            self.assertFalse([n for n in names if b"SECRET-TEST-TOKEN" in z.read(n)])
+            self.assertTrue([n for n in names if n.endswith("external_agents/other/keep.json")],"only the tokens folder is left out")
+    def test_plain_backup_leaves_the_tokens_out(self):
+        self._tokens()
+        self._check(backup_restore.create_data_backup(out_dir=self.out))
+    def test_export_all_leaves_the_tokens_out(self):
+        from Cores.Services import settings_service
+        from Cores.Update import health_check
+        self._tokens()
+        real=health_check.data_dir
+        health_check.data_dir=lambda:self.dir
+        try:
+            out=os.path.join(self.out,"all.zip")
+            settings_service.export_all_zip(out)
+        finally:
+            health_check.data_dir=real
+        self._check(out)
 @unittest.skipUnless(db_driver.has_sqlcipher(),"sqlcipher3 not installed")
 class EncryptedBackupTest(Base):
     def test_loyabak_round_trip_keeps_chains_history_appdocs_and_secrets(self):
