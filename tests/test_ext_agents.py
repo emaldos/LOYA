@@ -433,7 +433,7 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual("CB",o.can_use_tool)
         self.assertEqual("claude-opus-5-5",o.model);self.assertEqual("high",o.effort)
         self.assertEqual(["user","project"],o.setting_sources)
-        self.assertEqual("LOYA-NG/1.0.3",o.client_app)
+        self.assertEqual("LOYA-NG/1.0.4",o.client_app)
         self.assertFalse(hasattr(o,"sandbox"))
         self.assertEqual({"disableAllHooks":True},json.loads(o.settings))
         self.assertNotIn("Claude Code",job["system_prompt"])

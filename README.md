@@ -6,11 +6,11 @@
 
 **A local-first desktop workspace for penetration testers: notes, commands, targets, automation, reporting and CVE intel in one app.**
 
-This repository is **LOYA NG** (version 1.0.3), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
+This repository is **LOYA NG** (version 1.0.4), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
 
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational.svg)](#quick-start)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
-[![Version](https://img.shields.io/badge/version-1.0.3-blueviolet.svg)](Cores/Update/CurrentVersion.info)
+[![Version](https://img.shields.io/badge/version-1.0.4-blueviolet.svg)](Cores/Update/CurrentVersion.info)
 [![License](https://img.shields.io/badge/license-LOYA%20Community%20%28honor--based%29-green.svg)](LICENSE)
 
 </div>
@@ -44,7 +44,7 @@ LOYA NG is a native desktop window (via [pywebview](https://pywebview.flowrl.com
 | [CVE Intel](#cve-intel) | Offline index of every published CVE, plus optional NVD / KEV / EPSS lookups, news and a watchlist |
 | [AI](#ai-claude-code-codex-and-mcp) | Local MCP server for Claude Code / Codex and other clients, gated by AI Roles with approvals and audit |
 | [Security](#security-and-encryption-at-rest) | App lock, SQLCipher database with an Argon2id-derived key, encrypted backups, audit log |
-| [Backups](#backups-import-and-export) | Manual and scheduled backups, restore, Export / Import All, per-type import and export |
+| [Backups](#backups-import-and-export) | Always encrypted full backups and restore, Export my work / import it, per-type import and export |
 
 <p align="center">
   <img src="Docs/screenshots/notes.png" alt="Notes page with demo data" width="900">
@@ -424,15 +424,27 @@ Settings > AI > Agents lets the AI panel host two external coding agents (consen
 
 ### Backups, import and export
 
-- **Backups** to `Backups/`, manual or automatic (an interval in hours, a number of backups to keep, and an optional off-machine copy folder).
-- With encryption on, a backup is an **encrypted `.loyabak`**: AES-256-GCM in authenticated chunks, so tampering, reordering and truncation are detected. Plain and encrypted backups are never mixed up on restore.
-- Restores are checked for unsafe paths, zip bombs and free space before anything is replaced; an update always writes a backup first.
-- **Export All / Import All** (merge or replace), plus import and export for Notes (JSON, CSV, Markdown, SQLite, Obsidian / Joplin folders, CherryTree), Commands, Targets and reports.
+Two different things live here:
+
+- **Full backup of this install** (`Settings > Backup`): the whole `Data/` folder (settings and database included; CLI connection tokens are left out), to bring this install back. Manual or automatic (an interval in hours, a number of backups to keep, and an optional off-machine copy folder).
+- **Export my work** (`Settings > Import & Export`): only your shareable content (notes, commands, Quick Space, targets and profiles, reports, diagrams), to move work to another install or another person. Secrets and machine state never go in.
+
+Backups:
+
+- Every backup is an **encrypted `.loyabak`** (AES-256-GCM in authenticated chunks, so tampering, reordering and truncation are detected). With encryption at rest on, it is sealed with the PIN-wrapped data key; otherwise with a **backup password** (Argon2id-derived key, salt and parameters in the file header). A plain backup is never written.
+- `Backup Now` asks for the backup password (with confirmation, a minimum length and a strength hint) and offers **Remember for automatic backups**, which keeps it in the OS keyring only, never in `Data/` or `settings.json`. `Forget Backup Password` removes it.
+- Automatic backups run only when encryption at rest is on or a password is remembered. Otherwise they are skipped and the Backup tab says so.
+- Restore always asks for the backup's password or PIN before anything is touched; a wrong one restores nothing. Old plain `.zip` backups still restore, after a warning that they were not encrypted (make an encrypted backup, then delete them).
+- Restores are checked for unsafe paths, zip bombs and free space before anything is replaced; an update writes an encrypted backup first when it can (see the updater reference below).
+- Per-type import and export for Notes (JSON, CSV, Markdown, SQLite, Obsidian / Joplin folders, CherryTree), Commands, Targets and reports.
 
 <details>
 <summary><b>Import and export: full reference</b></summary>
 
-- From `Settings > Import & Export`: Export All writes `LOYA_All_export_<timestamp>.zip` (every file in `Data/` plus a `manifest.json`); Import All checks that the zip contains `Data/` files, shows the file count, then asks Merge or Replace. The Backup tab uses the same `Data/` format and can restore a zip picked from disk
+- From `Settings > Import & Export`, **Export my work (notes, targets, reports, diagrams...)** writes `LOYA_Work_export_<timestamp>.zip`, built from an allowlist: a `manifest.json` (format, app version, item counts per kind, what was included), a fresh `content.db` holding only the content tables (notes and their versions, commands, chains and diagrams, reports with sections, findings, evidence, templates and the findings library), the content stores as plain JSON (targets, target values and target profiles, Quick Space, notes layout, tag colours) and the attachments and chain files. API keys and the Secrets table, PIN data and the key file, CLI connection tokens, the audit log, `deps_state`, the search and CVE indexes, terminal sessions and jobs, logs and backups are never included
+- Export options: **Include chain run history** (on by default; run variables are removed because they can hold target passwords), **Include settings** (off; only portable preferences such as theme, appearance, AI Roles permission levels and CVE options, never keys or paths), **Include AI chats** (off; they can hold pasted secrets) and **Protect the export with a password** (the file becomes a `.loyawork`, AES-256-GCM under an Argon2id-derived key). With encryption at rest on, an unprotected export asks for your PIN first, since the file is readable by anyone
+- Import accepts a `.zip` or `.loyawork` work export and old full-data export zips (only the content is read from those; keys, tokens, settings and other machine files in them are ignored). It asks for the password of a protected file, shows the item counts per kind and the name clashes, then **Merge** (add what is missing; on a clash import as a copy with "(imported)" or skip it) or **Replace content**. Imported chains must be reviewed again before they run. Targets go back into the profile they came from (created when it does not exist here). Your own keys, PIN, tokens and settings are never changed, unless the file has settings and you tick **Apply settings**
+- A full backup (`.loyabak` with kind data) is not a work export: restore it from `Settings > Backup`
 - Notes export: JSON, CSV, Markdown ZIP (read-only, one `.md` per note), and the all-tables formats - JSON (`Notes`, `CommandsNotes`, `Commands`), a CSV ZIP of the same tables, or a SQLite `.db` holding only those tables
 - Notes import: JSON (a list of notes, or an object of tables such as the original LOYA Note export and NG's own Notes template), CSV, the all-tables JSON/CSV ZIP/`.db`, a Markdown folder (Obsidian / Joplin) and CherryTree `.ctd`. Bundled `CommandsNotes` rows are imported as standalone commands; legacy `<C [...]> ... </C>` command blocks become command cards. `Commands` rows are not imported separately because they are rebuilt from the cards in each note
 - Commands export/import: JSON (a list, or `{"CommandsNotes": [...]}`) and CSV, including command type and noise level. A conflict is an existing command with the same text (case and spacing ignored)
@@ -579,7 +591,7 @@ A WSL pass is not a Linux pass. It covers the kernel-level behaviour above, but 
 Issues and pull requests are welcome at [github.com/emaldos/LOYA](https://github.com/emaldos/LOYA). A few house rules:
 
 - **Windows and Linux both.** Every change must work on both platforms; gate platform-specific code and keep the other platform's behaviour unchanged.
-- **Version changes are deliberate.** The version in development is 1.0.3; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
+- **Version changes are deliberate.** The version in development is 1.0.4; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
 - **LF line endings.** Do not commit files whose only change is CRLF churn.
 - Add a regression test for every fix (Python in `tests/`, browser-side logic in `tests/js/`).
 
@@ -609,7 +621,7 @@ The repository ships [Claude Code](https://claude.com/claude-code) skills in [`.
 - When a newer version is found, the app shows **"LOYA NG X.Y.Z is available"** with the release notes (rendered from the release's Markdown, sanitised; links open in the system browser), the release date and download size, and **Update now**, **Remind me later** (until the next launch or 8 hours), **Skip this version**, and **Release notes on GitHub**. It is also added to the bell, and an OS notification is sent once per version. Nothing is shown over the lock screen, and nothing can be installed while the app is locked
 - `When an update is available`: **Ask me** (default), **Download in the background and install on next restart**, or **Only notify** (bell + toast, no pop-up)
 - **Update now**: download -> verify -> back up -> close -> apply -> restart, with progress. The package is only accepted if its SHA-256 matches the value published in the release (GitHub's asset digest, a `SHA256SUMS` asset, and/or a `SHA256:` line in the notes - all must agree), it is a release asset of that exact tag, it unpacks safely (no `..`/absolute paths, links, duplicate or oversized entries) and its own `CurrentVersion.info` equals the release version
-- Before applying, a data backup is written to `Backups/` and a code snapshot to `Cores/Update/OldVersions/` (the last 2 are kept). The update is applied by a helper process after the app has closed (so no file is in use on Windows) and replaces only `Assets/`, `Cores/`, `UI/`, `AI Template/` and the top-level app files - never `Data/`, `Logs/`, `Backups/`, the venvs or `.git`
+- Before applying, an encrypted data backup is written to `Backups/` (with the PIN-wrapped key when encryption at rest is on, or the remembered backup password; with neither, the data copy is skipped and the reason logged, never written unencrypted) and a code snapshot to `Cores/Update/OldVersions/` (the last 2 are kept). The update is applied by a helper process after the app has closed (so no file is in use on Windows) and replaces only `Assets/`, `Cores/`, `UI/`, `AI Template/` and the top-level app files - never `Data/`, `Logs/`, `Backups/`, the venvs or `.git`
 - The new version must start and load its UI (plus a startup health check) within 3 minutes. If it does not, the helper restores the code snapshot, restarts the previous version and shows "Update to X failed ... and was rolled back". Your data is never changed by a rollback
 - Manual recovery: `python RunNote.py --recovery` (restore a data backup, downgrade to one of the last 2 code snapshots, open logs, diagnostics). Logs: `Logs/Update_log.log`, `Logs/Downgrade_log.log`
 
@@ -660,6 +672,7 @@ Never include: `Data/`, `Logs/`, `Backups/`, `.venv_windows/`, `.venv_linux/`, `
 <details>
 <summary><b>Version history</b></summary>
 
+- **1.0.4**: "Export my work" replaces the full Data/ export: it carries only your notes, commands, Quick Run items, targets and elements, reports, chains and diagrams (run history optional, settings opt-in), never API keys, connection tokens, the audit log or machine state, and can be protected with a password; Import previews the file and merges or replaces. Every full backup is now encrypted with a password (or the encryption-at-rest PIN) and restore always asks for it. Backups and exports no longer include the Claude Code / Codex connection tokens.
 - **1.0.3**: the launcher notices when the system Python changes under an existing install (for example Kali moving from Python 3.13 to 3.14) and rebuilds the virtual environment by itself, rebuilds it when its Python no longer starts, ties the "requirements up to date" cache to the Python version, checks that pywebview really imports, and reports an app that stops right after starting with the real error instead of "LOYA NG is running".
 - **1.0.2**: fixes full terminal tabs (Open in terminal for Codex and Claude Code) closing at once with "[process exited]" on Windows, lists every AI provider in the AI panel grouped as Connected, Available and Not set up with the connected ones first, and writes version files with LF line endings.
 - **1.0.1**: fixes the Windows data hardening that could lock users out of their own `Data/` files (installs hit by it repair themselves on the next start), makes every AI write changeable command values as `{Element}` placeholders that reuse existing elements, adds full terminal mode with xterm.js (Claude Code, Codex, vim and htop run inside LOYA tabs), a terminal right click menu, crash diagnostics, a launcher startup screen, demo chain diagrams, smoother CLI connection setup and the developer docs in `Docs/`.

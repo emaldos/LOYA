@@ -208,7 +208,7 @@ class EncryptedModeTests(Case):
         self.assertFalse([n for n in names if "cve_index" in n], "the public CVE index is never backed up")
         with common_db.connection() as con:
             con.execute("DELETE FROM Notes")
-        ok, msg = backup_restore.restore_data_backup(out, mode="replace")
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", pin=EPIN)
         self.assertTrue(ok, msg)
         with common_db.connection() as con:
             self.assertEqual(1, con.execute("SELECT COUNT(*) FROM Notes").fetchone()[0])
@@ -233,10 +233,10 @@ class EncryptedModeTests(Case):
             other.wipe()
 
     def test_plain_backup_is_refused_while_encrypted(self):
-        plain = backup_restore.create_data_backup(out_dir=self.p("bk"))
-        self.assertTrue(plain.endswith(".zip"))
+        plain = backup_restore.create_data_backup(out_dir=self.p("bk"), password="test-backup-pw")
+        self.assertTrue(loyabak.is_loyabak(plain), "a backup made with encryption at rest off is password-protected")
         self.enable()
-        ok, msg = backup_restore.restore_data_backup(plain, mode="replace")
+        ok, msg = backup_restore.restore_data_backup(plain, mode="replace", password="test-backup-pw")
         self.assertFalse(ok)
         self.assertIn("not encrypted", msg)
         self.assertEqual("encrypted", db_driver.file_kind(common_db.db_path()))
@@ -300,7 +300,7 @@ class EncryptedModeTests(Case):
         self.assertFalse(ie.export_needs_pin("notes", "json")["needs_pin"])
         self.assertIn("NOT encrypted", ie.export_needs_pin("notes", "db")["warning"])
         own = backup_restore.create_data_backup(out_dir=self.p("bk"))
-        self.assertEqual({"encrypted": True, "needs_pin": False}, {k: v for k, v in backup_restore.backup_needs_pin(own).items() if k != "created_at"})
+        self.assertEqual({"encrypted": True, "needs_pin": False, "protect": "pin"}, {k: v for k, v in backup_restore.backup_needs_pin(own).items() if k in ("encrypted", "needs_pin", "protect")})
         plain_zip = self.p("bk", "plain.zip")
         with zipfile.ZipFile(plain_zip, "w") as z:
             z.writestr("Data/x.txt", "x")
@@ -312,10 +312,12 @@ class EncryptedModeTests(Case):
             self.assertTrue(backup_restore.backup_needs_pin(own)["needs_pin"], "made under another key: ask for its PIN")
             api._remember_pick(own)
             self.assertTrue(ie.import_needs_pin(own)["needs_pin"])
+            # A full backup is restored under Settings > Backup (Import & Export takes work exports only).
+            bk = api.BackupAPI()
             with self.assertRaises(ValueError) as ctx:
-                ie.apply_import_all(own, "replace", "000000")
+                bk.restore(own, "replace", "000000")
             self.assertIn("Wrong PIN", str(ctx.exception))
-            self.assertEqual("Restore done. Restart app if needed.", ie.apply_import_all(own, "replace", EPIN))
+            self.assertEqual("Restore done. Restart app if needed.", bk.restore(own, "replace", EPIN))
         finally:
             other.wipe()
             if common_db.session_key() is other:

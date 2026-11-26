@@ -13,6 +13,7 @@ from Cores.Services import security_service as sec
 EPIN = "482193"
 NEW_PIN = "731905"
 FAST_KDF = {"name": "argon2id", "m_kib": 8192, "t": 1, "p": 1} if crypto_store.has_argon2() else {"name": "scrypt", "n": 2 ** 14, "r": 8, "p": 1}
+BKPW = "test-backup-pw"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -61,9 +62,9 @@ class Case(unittest.TestCase):
 class PlainAuditTests(Case):
     def test_audit_file_survives_restore_and_logs_the_restore(self):
         sec.log_audit_event("unlock", "before-backup", True)
-        out = backup_restore.create_data_backup(out_dir=self.bk)
+        out = backup_restore.create_data_backup(out_dir=self.bk, password=BKPW)
         sec.log_audit_event("pin_change", "after-backup", True)
-        ok, msg = backup_restore.restore_data_backup(out, mode="replace")
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", password=BKPW)
         self.assertTrue(ok, msg)
         ev = self.events()
         self.assertIn(("unlock", "before-backup"), ev)
@@ -86,9 +87,9 @@ class PlainAuditTests(Case):
         self.assertEqual(["a", "b", "c"], got)
 
     def test_merge_mode_keeps_live_log(self):
-        out = backup_restore.create_data_backup(out_dir=self.bk)
+        out = backup_restore.create_data_backup(out_dir=self.bk, password=BKPW)
         sec.log_audit_event("lock", "after-backup", True)
-        ok, msg = backup_restore.restore_data_backup(out, mode="merge")
+        ok, msg = backup_restore.restore_data_backup(out, mode="merge", password=BKPW)
         self.assertTrue(ok, msg)
         self.assertIn(("lock", "after-backup"), self.events())
 
@@ -109,7 +110,13 @@ class EncryptedRestoreTests(Case):
         with common_db.connection() as con:
             con.execute("DELETE FROM Notes")
         self.assertFalse(backup_restore.backup_needs_pin(out)["needs_pin"])
+        self.assertEqual("pin", backup_restore.backup_needs_pin(out)["protect"], "a PIN backup still asks for the PIN")
         ok, msg = backup_restore.restore_data_backup(out, mode="replace")
+        self.assertFalse(ok, "no PIN typed: nothing is restored")
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", pin="000000")
+        self.assertEqual((False, "Restore failed: Wrong PIN."), (ok, msg))
+        self.assertEqual(0, self.notes())
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", pin=EPIN)
         self.assertTrue(ok, msg)
         self.assertEqual(1, self.notes())
         ok, msg = self.relock_unlock(EPIN)
@@ -120,8 +127,8 @@ class EncryptedRestoreTests(Case):
         out = backup_restore.create_data_backup(out_dir=self.bk)
         ok, msg = sec.set_pin(NEW_PIN, EPIN)
         self.assertTrue(ok, msg)
-        self.assertFalse(backup_restore.backup_needs_pin(out)["needs_pin"], "same data key: no PIN prompt")
-        ok, msg = backup_restore.restore_data_backup(out, mode="replace")
+        self.assertFalse(backup_restore.backup_needs_pin(out)["needs_pin"], "same data key: no foreign-PIN prompt")
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", pin=NEW_PIN)
         self.assertTrue(ok, msg)
         self.assertTrue(sec.verify_pin(NEW_PIN))
         self.assertFalse(sec.verify_pin(EPIN), "the backup's old PIN must not come back")
@@ -184,7 +191,7 @@ class EncryptedRestoreTests(Case):
         sec.log_audit_event("unlock", "plain-after-backup", True)
         with common_db.connection() as con:
             self.assertEqual(2, con.execute("SELECT COUNT(*) FROM AuditEvents WHERE event='terminal_command'").fetchone()[0])
-        ok, msg = backup_restore.restore_data_backup(out, mode="replace")
+        ok, msg = backup_restore.restore_data_backup(out, mode="replace", pin=EPIN)
         self.assertTrue(ok, msg)
         with common_db.connection() as con:
             rows = [r[0] for r in con.execute("SELECT detail FROM AuditEvents WHERE event='terminal_command' ORDER BY ts").fetchall()]

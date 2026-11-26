@@ -52,7 +52,7 @@ def _open_path(path):
 def _backup_rows(root_dir=None,limit=8):
     rows=[];bdir=Path(_health_check.backups_dir())
     try:
-        for p in bdir.glob("*.zip"):
+        for p in list(bdir.glob("*.zip"))+list(bdir.glob("*.loyabak")):
             if p.is_file():
                 st=p.stat()
                 rows.append({"path":str(p),"mtime":st.st_mtime,"size":st.st_size})
@@ -132,7 +132,16 @@ def _restore_backup_interactive(context,output=print):
     if not row:return False,"Backup restore cancelled."
     mode_raw=_ask("Restore mode [M=merge / R=replace, default M]: ","m").lower()
     mode="replace" if mode_raw.startswith("r") else "merge"
-    ok,msg=_backup_restore.restore_data_backup(row["path"],mode=mode,root_dir=context.get("root_dir",""))
+    # Backups are encrypted: ask for the backup password (or the PIN, for one made with encryption at rest on) before anything is touched.
+    pw=pin=None
+    try:info=_backup_restore.backup_needs_pin(row["path"])
+    except Exception as e:return False,f"Backup restore failed: {e}"
+    import getpass
+    try:
+        if info.get("protect")=="password":pw=getpass.getpass("Backup password: ")
+        elif info.get("protect")=="pin":pin=getpass.getpass("PIN for this backup: ")
+    except (EOFError,KeyboardInterrupt):return False,"Backup restore cancelled."
+    ok,msg=_backup_restore.restore_data_backup(row["path"],mode=mode,root_dir=context.get("root_dir",""),pin=pin,password=pw)
     return ok,msg
 def _run_downgrade_interactive(context,launcher_python="",output=print):
     rows=context.get("snapshots",[]) if isinstance(context,dict) else []

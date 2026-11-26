@@ -136,7 +136,7 @@ def _create_encrypted_backup(prefix,bdir,data_dir,root_dir):
                     if os.path.normcase(os.path.abspath(p)).startswith(main) or fn.endswith(".tmp"):continue
                     z.write(p,arcname="Data/"+os.path.relpath(p,data_dir).replace("\\","/"))
             if os.path.isfile(snap):z.write(snap,arcname="Data/Note_LOYA_V1.db")
-        _lb.write(zp,str(out),key,keyfile,{"kind":"data","label":prefix,"created_at":_utc_now()})
+        _lb.write(zp,str(out),key,keyfile,{"kind":"data","protect":"pin","label":prefix,"created_at":_utc_now()})
         _lb.verify(str(out),key)
     finally:
         shutil.rmtree(work,ignore_errors=True)
@@ -172,27 +172,13 @@ def _skip_backup_dir(base,name,data_dir,bdir):
     if full==os.path.normcase(os.path.abspath(os.path.join(str(data_dir),"external_agents","connections"))):return True
     if os.path.abspath(base)!=os.path.abspath(str(data_dir)):return False
     return name in _SKIP_BACKUP_TOP or name.startswith(".loya_backup_")
-def create_data_backup(progress=None,prefix="Backup",root_dir=None,out_dir=None):
-    bdir=_backups_dir(root_dir,out_dir)
-    data_dir=_data_dir(root_dir)
-    from Cores import common_db as _cdb
-    if _encrypted_mode(root_dir) and _cdb.session_key() is not None:
-        out=_create_encrypted_backup(prefix,bdir,data_dir,root_dir)
-        _log_update("[+]",f"Encrypted data backup created: {out}",root_dir)
-        return str(out)
-    # Encrypted mode while locked (e.g. the updater): a plain zip of files that are themselves ciphertext (SQLCipher DB, encrypted
-    # attachments, PIN-wrapped key file) - the WAL was folded in at lock, and nothing readable is added.
-    name=f"{_safe_name(prefix,'Backup')}_{_stamp()}.zip"
-    out=bdir.joinpath(name)
-    if progress:
-        try:progress.setValue(10);progress._label.setText("Collecting Data/ ...")
-        except Exception:pass
+def _collect_data_zip(zp,data_dir,bdir):
+    """Write Data/ (minus the skipped folders) into the zip at zp; a plain DB goes in as a consistent snapshot."""
     work=tempfile.mkdtemp(prefix=".loya_backup_",dir=str(data_dir)) if data_dir.is_dir() else None
     try:
-        # A plain DB goes in as a consistent snapshot (chain graphs, run history and run logs included), never half-written.
         snap=plain_db_snapshot(data_dir.joinpath(_DB_NAME),work) if work else None
         main=os.path.normcase(os.path.abspath(str(data_dir.joinpath(_DB_NAME))))
-        with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED) as z:
+        with zipfile.ZipFile(zp,"w",compression=zipfile.ZIP_DEFLATED) as z:
             if data_dir.is_dir():
                 for base,dirs,files in os.walk(data_dir):
                     # Data/cve_index is public, regenerable CVE data (tens of MB): the app reinstalls it when missing, so backups skip it.
@@ -201,15 +187,57 @@ def create_data_backup(progress=None,prefix="Backup",root_dir=None,out_dir=None)
                         p=Path(base).joinpath(fn)
                         np=os.path.normcase(os.path.abspath(str(p)))
                         if snap and (np==main or any(np==main+sfx for sfx in _DB_SIDECARS)):continue
-                        rel=os.path.relpath(p,data_dir).replace("\\","/")
-                        z.write(str(p),arcname=f"Data/{rel}")
+                        if fn.endswith(".tmp"):continue
+                        z.write(str(p),arcname="Data/"+os.path.relpath(p,data_dir).replace("\\","/"))
             if snap:z.write(snap,arcname=f"Data/{_DB_NAME}")
     finally:
         if work:shutil.rmtree(work,ignore_errors=True)
+def _create_password_backup(prefix,bdir,data_dir,password):
+    """Encryption at rest off (or locked): a .loyabak whose fresh data key is wrapped under the backup password (Argon2id +
+    AES-256-GCM). Nothing readable is written: the zip is built in a private temp folder and encrypted before it reaches bdir."""
+    from Cores import loyabak as _lb,crypto_store as _cs
+    out=bdir.joinpath(f"{_safe_name(prefix,'Backup')}_{_stamp()}{_lb.EXT}")
+    # The plain zip only ever exists in a private work folder inside Data/ (skipped by the walk), and is removed after encryption.
+    tmp=tempfile.mkdtemp(prefix=".loya_backup_",dir=str(data_dir)) if data_dir.is_dir() else tempfile.mkdtemp(prefix="loya_backup_")
+    try:
+        try:os.chmod(tmp,0o700)
+        except OSError:pass
+        zp=os.path.join(tmp,"backup.zip")
+        _collect_data_zip(zp,data_dir,bdir)
+        dek=_cs.DataKey.generate()
+        try:
+            kf=_cs.wrap_dek(dek,str(password))
+            _lb.write(zp,str(out),dek,kf,{"kind":"data","protect":"password","label":prefix,"created_at":_utc_now()})
+            _lb.verify(str(out),dek)
+        finally:dek.wipe()
+    finally:
+        shutil.rmtree(tmp,ignore_errors=True)
+    return out
+def create_data_backup(progress=None,prefix="Backup",root_dir=None,out_dir=None,password=None):
+    """Every data backup is an encrypted .loyabak, never a plaintext zip. Encryption at rest on and unlocked: the PIN-wrapped
+    data key protects it (as before). Otherwise the backup password (given, or remembered in the OS keyring) does; without one
+    this raises backup_password.PasswordRequired and writes nothing."""
+    from Cores import backup_password as _bp
+    from Cores import common_db as _cdb
+    bdir=_backups_dir(root_dir,out_dir)
+    data_dir=_data_dir(root_dir)
+    if progress:
+        try:progress.setValue(10);progress._label.setText("Collecting Data/ ...")
+        except Exception:pass
+    if _encrypted_mode(root_dir) and _cdb.session_key() is not None and not password:
+        out=_create_encrypted_backup(prefix,bdir,data_dir,root_dir)
+        _log_update("[+]",f"Encrypted data backup created: {out}",root_dir)
+    else:
+        pw=password or _bp.get()
+        if not pw:
+            raise _bp.PasswordRequired("Unlock LOYA NG or set a backup password first." if _encrypted_mode(root_dir) else "Set a backup password first.")
+        err=_bp.check(pw)
+        if err:raise ValueError(err)
+        out=_create_password_backup(prefix,bdir,data_dir,pw)
+        _log_update("[+]",f"Password-protected data backup created: {out}",root_dir)
     if progress:
         try:progress.setValue(100);progress._label.setText("Done.")
         except Exception:pass
-    _log_update("[+]",f"Data backup created: {out}",root_dir)
     return str(out)
 # Backup zips come from the user's own Backups/ folder but also from an off-site folder or a file picked for restore, so they are
 # checked before anything is written: safe names (no .., absolute, drive, ADS or reserved names), no links or special files, no
@@ -255,27 +283,53 @@ def _safe_extract_backup(zip_path,dst):
                     written+=len(chunk)
                     if written>info.file_size:raise ValueError(f"A backup entry is larger than declared: {info.filename[:120]}")
                     fh.write(chunk)
-def _open_loyabak(path,tmp,pin=None):
-    """Decrypt a .loyabak into tmp/backup.zip. The session key opens backups of this installation; another PIN-era backup
-    needs the PIN that was current when it was made. Returns (zip_path, data_key)."""
+def _open_loyabak(path,tmp,pin=None,password=None,trusted=False):
+    """Decrypt a .loyabak into tmp/backup.zip. Returns (zip_path, data_key of the DB inside or None).
+    protect "password": the backup password opens it (wrong -> "Wrong password."); the container key is not the DB's key.
+    protect "pin" (encryption at rest): the PIN is always asked for. A backup of this installation (same data key) accepts the
+    current PIN or the one set when it was made; another PIN-era backup needs the PIN that was current when it was made.
+    trusted: an internal caller (the recovery console after its own prompt is not one) may use the session key / remembered password."""
     from Cores import common_db as _cdb,loyabak as _lb,crypto_store as _cs
     header=_lb.read_header(path)
+    if str(header.get("kind") or "data")!="data":raise ValueError("This file is a work export, not a backup: import it under Settings > Import & Export.")
+    zp=os.path.join(tmp,"backup.zip")
+    if str(header.get("protect") or "pin")=="password":
+        pw=password
+        if not pw and trusted:
+            from Cores import backup_password as _bp
+            pw=_bp.get()
+        if not pw:raise ValueError("Enter the backup password to restore this backup.")
+        try:ck=_cs.unwrap(str(pw),header["keyfile"])
+        except _cs.WrongPin:raise ValueError("Wrong password.")
+        try:_lb.decrypt_to(path,zp,ck)
+        finally:ck.wipe()
+        return zp,None
     key=_cdb.session_key()
     dek=None
-    if key is not None and _cs.verify_dek(key,header["keyfile"]):dek=key.copy()
+    if key is not None and _cs.verify_dek(key,header["keyfile"]):
+        if not trusted:
+            if not pin:raise ValueError("Enter your PIN to restore this backup.")
+            ok=_cs.verify_pin(str(pin),header["keyfile"])
+            if not ok:
+                try:ok=_cs.verify_pin(str(pin),_cdb.key_path())
+                except _cs.KeyFileError:ok=False
+            if not ok:raise ValueError("Wrong PIN.")
+        dek=key.copy()
     elif pin:
         try:dek=_cs.unwrap(str(pin),header["keyfile"])
         except _cs.WrongPin:raise ValueError("Wrong PIN for this backup.")
     if dek is None:raise ValueError("This encrypted backup was made with another PIN: enter the PIN that was set when it was made.")
-    zp=os.path.join(tmp,"backup.zip")
     _lb.decrypt_to(path,zp,dek)
     return zp,dek
+LEGACY_PLAIN_WARNING="This backup was not encrypted. Make an encrypted backup, then delete this old one."
 def backup_needs_pin(path):
-    """{"encrypted", "needs_pin", "created_at"} for a backup file. needs_pin: an encrypted .loyabak whose key file does not wrap
-    this session's data key (made under another PIN / installation), so the restore must ask for that backup's PIN."""
+    """What a restore of this file has to ask for: {"encrypted", "protect": "password"|"pin"|"none", "needs_password",
+    "needs_pin", "legacy_plain", "created_at"}. needs_pin: a PIN-protected backup whose key file does not wrap this session's
+    data key (another PIN / installation): the restore needs that backup's PIN (and can re-wrap it under the current one).
+    A PIN-protected backup of this installation still asks for the PIN (protect "pin"); needs_pin is then False."""
     from Cores import common_db as _cdb,loyabak as _lb,crypto_store as _cs
     if not path or not _lb.is_loyabak(path):
-        out={"encrypted":False,"needs_pin":False,"created_at":""}
+        out={"encrypted":False,"protect":"none","needs_password":False,"needs_pin":False,"legacy_plain":True,"created_at":""}
         kf=_zip_keyfile(path) if path else None
         if kf is not None:
             # A zip made while locked in encrypted mode carries the SQLCipher DB and its key file: a foreign key needs its PIN too.
@@ -284,11 +338,13 @@ def backup_needs_pin(path):
         return out
     try:header=_lb.read_header(path)
     except _lb.BackupError as e:raise ValueError(str(e))
+    if str(header.get("protect") or "pin")=="password":
+        return {"encrypted":True,"protect":"password","needs_password":True,"needs_pin":False,"legacy_plain":False,"created_at":str(header.get("created_at","")),"kind":str(header.get("kind","data"))}
     key=_cdb.session_key()
     same=key is not None and _cs.verify_dek(key,header["keyfile"])
     # Same data key: the restore keeps this installation's key file (and PIN). Another key: the restore can re-wrap the backup's
     # key under the current PIN (restore(current_pin=...)), or else the backup's PIN comes back with it.
-    return {"encrypted":True,"needs_pin":not same,"created_at":str(header.get("created_at",""))}
+    return {"encrypted":True,"protect":"pin","needs_password":False,"needs_pin":not same,"legacy_plain":False,"created_at":str(header.get("created_at","")),"kind":str(header.get("kind","data"))}
 def _zip_keyfile(path):
     """The validated key file inside a plain backup zip (Data/Note_LOYA_V1.key), or None."""
     from Cores import crypto_store as _cs
@@ -338,7 +394,7 @@ def _read_live_audit_rows(dbp):
         try:return _sec.read_audit_rows(con)
         finally:con.close()
     except Exception:return []
-def restore_data_backup(zip_path,mode="merge",progress=None,root_dir=None,pin=None,current_pin=None):
+def restore_data_backup(zip_path,mode="merge",progress=None,root_dir=None,pin=None,current_pin=None,password=None,trusted=False):
     """Restore Data/ from a backup. Never rolls back the security audit log (security_audit.jsonl and the AuditEvents table keep
     every live entry; the backup's copy only adds what is missing) and never silently brings back an old PIN: when the backup's
     data key is this session's, the live key file is kept; when it is another key, current_pin (verified first) re-wraps it so the
@@ -357,8 +413,9 @@ def restore_data_backup(zip_path,mode="merge",progress=None,root_dir=None,pin=No
             try:progress.setValue(10);progress._label.setText("Extracting ...")
             except Exception:pass
         from Cores import loyabak as _lb
-        if _lb.is_loyabak(zip_path):
-            zip_path,dek=_open_loyabak(zip_path,tmp,pin)
+        legacy_plain=not _lb.is_loyabak(zip_path)
+        if not legacy_plain:
+            zip_path,dek=_open_loyabak(zip_path,tmp,pin,password,trusted)
         ex=os.path.join(tmp,"x");os.makedirs(ex,exist_ok=True)  # own folder: tmp also holds the decrypted backup.zip, which must never reach Data/
         _safe_extract_backup(zip_path,ex)
         src=os.path.join(ex,"Data")
@@ -465,10 +522,11 @@ def restore_data_backup(zip_path,mode="merge",progress=None,root_dir=None,pin=No
             try:progress.setValue(100);progress._label.setText("Done.")
             except Exception:pass
         _log_downgrade("[+]",f"Data restore ok: {src_name} mode={mode}",root_dir)
+        warn=(" "+LEGACY_PLAIN_WARNING) if legacy_plain else ""
         if live and merged:
             got=len(merged["chains"]["created"]),merged["runs"]["imported"]
-            if got[0] or got[1]:return True,f"Restore done ({got[0]} chain(s) and {got[1]} chain run(s) added from the backup). Restart app if needed."
-        return True,"Restore done. Restart app if needed."
+            if got[0] or got[1]:return True,f"Restore done ({got[0]} chain(s) and {got[1]} chain run(s) added from the backup). Restart app if needed."+warn
+        return True,"Restore done. Restart app if needed."+warn
     except Exception as e:
         _log_downgrade("[!]",f"Data restore failed: {src_name} ({e})",root_dir)
         if live:_audit_restore(src_name,mode,False,str(e))
@@ -603,9 +661,17 @@ def restore_code_snapshot(zip_path,root_dir=None,progress=None,replace=True):
         try:shutil.rmtree(tmp,ignore_errors=True)
         except Exception:pass
 def prepare_update_backups(current_version="",reason="update",keep_code_versions=2,progress=None,root_dir=None,data_backup_dir=None,code_backup_dir=None):
+    """Safety copies before an update. The data copy is always encrypted: under the remembered backup password, or the PIN-wrapped
+    data key while encryption at rest is on and unlocked. With neither, the data copy is skipped (logged, data_backup_skipped
+    says why) rather than written unencrypted; the code snapshot holds no user data and is always made."""
+    from Cores import backup_password as _bp
     ver=_helpers.coerce_local_version(current_version,_service.get_app_version())
-    data_backup=create_data_backup(progress=progress,prefix="UpdateBackup",root_dir=root_dir,out_dir=data_backup_dir)
+    data_backup="";skipped=""
+    try:data_backup=create_data_backup(progress=progress,prefix="UpdateBackup",root_dir=root_dir,out_dir=data_backup_dir)
+    except _bp.PasswordRequired as e:
+        skipped=f"No encrypted data backup before the update: {e}"
+        _log_update("[!]",skipped,root_dir)
     code_snapshot=create_code_snapshot(version=ver,reason=reason,keep=keep_code_versions,progress=progress,root_dir=root_dir,out_dir=code_backup_dir)
-    out={"version":ver,"data_backup":data_backup,"code_snapshot":code_snapshot.get("path",""),"old_versions_dir":str(old_versions_dir(root_dir,code_backup_dir))}
-    _log_update("[+]",f"Update safety backups ready: data={data_backup} code={out['code_snapshot']}",root_dir)
+    out={"version":ver,"data_backup":data_backup,"data_backup_skipped":skipped,"code_snapshot":code_snapshot.get("path",""),"old_versions_dir":str(old_versions_dir(root_dir,code_backup_dir))}
+    _log_update("[+]",f"Update safety backups ready: data={data_backup or 'skipped'} code={out['code_snapshot']}",root_dir)
     return out

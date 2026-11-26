@@ -18,12 +18,13 @@ const calls=[],statuses=[],prompts=[],confirms=[]
 const env={
 setState:{backupSelected:new Set(["/b/x.loyabak"]),backups:[{path:"/b/x.loyabak",name:"x.loyabak"}]},
 bridgeCall:(name,args)=>{calls.push([name,args]);
-if(name==="backup.needs_pin"||name==="importExport.import_needs_pin")return Promise.resolve({encrypted:true,needs_pin:!!state.needsPin})
+if(name==="backup.needs_pin"||name==="importExport.import_needs_pin")return Promise.resolve({encrypted:true,protect:"pin",needs_pin:!!state.needsPin})
 if(name==="backup.restore"){if(state.restoreError)return Promise.reject(new Error(state.restoreError));return Promise.resolve("Restore done.")}
 return Promise.resolve(null)},
 setChooseRestoreMode:()=>Promise.resolve(state.mode||"replace"),
 setPromptPin:(title,msg,_c,skip)=>{prompts.push([title,msg,skip]);const v=title==="Backup PIN"?state.pin:state.cur;return Promise.resolve(v===undefined?null:v)},
 appConfirm:(msg)=>{confirms.push(msg);return Promise.resolve(!!state.confirm)},
+setPromptBackupPassword:()=>Promise.resolve(null),SET_BACKUP_PLAIN_WARNING:"plain",
 SET_BACKUP_PIN_WARNING:"This backup uses the PIN that was set when it was made. After restore, unlock with that PIN.",
 setStatus:(id,msg,err)=>statuses.push([id,msg,!!err]),
 }
@@ -32,12 +33,12 @@ const mod=new Function(...names,fn("setBackupPin")+fn("setDoRestoreSelected")+";
 return {mod,calls,statuses,prompts,confirms}
 }
 async function main(){
-// Own backup (opens with the session key): no prompt, restore gets pin=null.
-const a=harness({needsPin:false})
+// Own backup (same data key): restore still asks for the PIN first (one prompt, no current-PIN step) and passes it through.
+const a=harness({needsPin:false,pin:"own-pin-1234"})
 a.mod.setDoRestoreSelected();for(let i=0;i<6;i++)await tick()
 const ra=a.calls.find((c)=>c[0]==="backup.restore")
-check("own backup: no PIN prompt",a.prompts.length===0,JSON.stringify(a.prompts))
-check("own backup: restore called with pin null",ra&&ra[1][0]==="/b/x.loyabak"&&ra[1][1]==="replace"&&ra[1][2]===null,JSON.stringify(ra))
+check("own backup: one PIN prompt",a.prompts.length===1&&a.prompts[0][0]==="Backup PIN",JSON.stringify(a.prompts))
+check("own backup: restore gets the typed PIN",ra&&ra[1][0]==="/b/x.loyabak"&&ra[1][1]==="replace"&&ra[1][2]==="own-pin-1234"&&ra[1][3]===null,JSON.stringify(ra))
 // Backup from another PIN: prompt, and the typed PIN is passed through; replace then asks for the current PIN to keep it.
 const b=harness({needsPin:true,pin:"old-pin-4821",cur:"cur-pin-7310"})
 b.mod.setDoRestoreSelected();for(let i=0;i<8;i++)await tick()
@@ -69,7 +70,7 @@ const d=harness({needsPin:true,pin:"nope",cur:"cur",restoreError:"Restore failed
 d.mod.setDoRestoreSelected();for(let i=0;i<8;i++)await tick()
 check("wrong PIN: clear error shown",d.statuses.some((s)=>s[2]&&/Wrong PIN/.test(s[1])),JSON.stringify(d.statuses))
 // Static checks on the other two call sites.
-check("import-all restore asks for the backup PIN too",/setBackupPin\("importExport\.import_needs_pin"/.test(source)&&/apply_import_all",\[src\.path,mode,p\.pin,p\.current_pin\]/.test(source))
+check("import-all goes through the work import preview, not a backup restore",/importExport\.preview_import_all/.test(source)&&/apply_import_all",\[src\.path,opts\]/.test(source))
 check("plain export asks first and warns",/importExport\.export_needs_pin/.test(source)&&/setPromptPin\("Unencrypted export"/.test(source)&&/NOT encrypted/.test(source))
 // PIN prompt keyboard: Enter submits through the OK handler (so the mismatch check runs), Escape cancels.
 const pp=source.slice(source.indexOf("\nfunction setPromptPin("),source.indexOf("\nfunction setLoadSecurity("))

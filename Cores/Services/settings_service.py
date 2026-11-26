@@ -391,10 +391,19 @@ class Backup:
                 else:bad+=1
             except Exception:bad+=1
         return ok,bad
-    def create(self,progress=None):
-        return _update_backup.create_data_backup(progress=progress,prefix="Backup",out_dir=self.dir)
-    def restore(self,zip_path,mode,progress=None,pin=None,current_pin=None):
-        return _update_backup.restore_data_backup(zip_path,mode=mode,progress=progress,pin=pin,current_pin=current_pin)
+    def create(self,progress=None,password=None,remember=False):
+        """An encrypted .loyabak (see backup_restore.create_data_backup). password: a new or one-off backup password (checked);
+        remember: keep it in the OS keyring for automatic and update backups (never in Data/ or settings.json)."""
+        from Cores import backup_password as _bp
+        if password:
+            err=_bp.check(password)
+            if err:raise ValueError(err)
+        out=_update_backup.create_data_backup(progress=progress,prefix="Backup",out_dir=self.dir,password=password or None)
+        if password and remember and not _bp.remember(password):_log("[!]","Backup password not remembered: no OS keyring available.")
+        clear_backup_notice()
+        return out
+    def restore(self,zip_path,mode,progress=None,pin=None,current_pin=None,password=None):
+        return _update_backup.restore_data_backup(zip_path,mode=mode,progress=progress,pin=pin,current_pin=current_pin,password=password)
     def delete(self,paths):
         ok=0;bad=0
         for p in (paths or []):
@@ -404,56 +413,41 @@ class Backup:
                 else:bad+=1
             except Exception:bad+=1
         return ok,bad
-def _db_snapshot_for_export(data_dir,work):
-    """A consistent copy of the main DB for Export All (plain: SQLite backup API; encrypted and unlocked: an encrypted copy
-    under the same key), or None to copy the file as it is (locked: the file is ciphertext with the WAL folded in)."""
-    from Cores import db_driver as _drv
-    dbp=os.path.join(data_dir,"Note_LOYA_V1.db")
-    kind=_drv.file_kind(dbp)
-    if kind=="plain":return _update_backup.plain_db_snapshot(dbp,work)
-    key=_common_db.session_key()
-    if kind!="encrypted" or key is None:return None
-    snap=os.path.join(work,"db.snap")
-    try:
-        _drv.backup_encrypted(dbp,snap,key)
-        return snap
-    except Exception:
-        return None
-def export_all_zip(out_path):
-    data_dir=_health_check.data_dir();out_abs=os.path.abspath(out_path);files=[]
-    work=None
-    if os.path.isdir(data_dir):
-        work=tempfile.mkdtemp(prefix=".loya_backup_",dir=data_dir)
-        snap=_db_snapshot_for_export(data_dir,work)
-        main=os.path.normcase(os.path.abspath(os.path.join(data_dir,"Note_LOYA_V1.db")))
-        try:bdir=_common_db.backups_dir()
-        except Exception:bdir=None
-        for b,dirs,names in os.walk(data_dir):
-            # The same folders a data backup leaves out: the public CVE index, migration work, backups kept under Data/.
-            dirs[:]=[d for d in dirs if not _update_backup._skip_backup_dir(b,d,data_dir,bdir)]
-            for n in names:
-                src=os.path.abspath(os.path.join(b,n))
-                if src==out_abs or not os.path.isfile(src) or n.endswith(".tmp") or n=="loya.pid":continue
-                if snap and os.path.normcase(src) in {main,main+"-wal",main+"-shm",main+"-journal"}:continue
-                files.append((src,"Data/"+os.path.relpath(src,data_dir).replace("\\","/")))
-        if snap:files.append((snap,"Data/Note_LOYA_V1.db"))
-    try:
-        from Cores.Update import update_service as _up
-        ident=_up.get_app_identity() or {}
-    except Exception:ident={}
-    meta={"type":"LOYA Note Export All","format_version":1,"created_at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"app_version":_norm(ident.get("display_version","")) or _norm(ident.get("version","")),"files":[arc for _,arc in files]}
-    os.makedirs(os.path.dirname(out_abs) or ".",exist_ok=True)
-    try:
-        with zipfile.ZipFile(out_abs,"w",compression=zipfile.ZIP_DEFLATED) as z:
-            z.writestr("manifest.json",json.dumps(meta,ensure_ascii=False,indent=2))
-            for src,arc in files:z.write(src,arcname=arc)
-    finally:
-        if work:shutil.rmtree(work,ignore_errors=True)
-    _log("[+]",f"Export all -> {out_abs} ({len(files)} files)")
-    return len(files)
+def export_all_zip(out_path,**opts):
+    """Export my work: the allowlisted content only (Cores/Services/work_export.py). Returns the number of zip entries."""
+    from Cores.Services import work_export as _we
+    return _we.export_work_zip(out_path,**opts)["files"]
 def import_all_info(path):
-    with zipfile.ZipFile(path,"r") as z:names=z.namelist()
-    return len([n for n in names if n.replace("\\","/").startswith("Data/") and not n.endswith("/")])
+    """The number of content items a work export (or an old full-Data zip) would bring, 0 when it is not one."""
+    from Cores.Services import work_import as _wi
+    kind=_wi.detect(path)
+    if kind=="work_protected":return 1
+    if kind not in ("work","legacy"):return 0
+    try:return sum(int(v or 0) for v in (_wi.preview(path).get("counts") or {}).values())
+    except Exception:return 0
+AUTO_BACKUP_SKIPPED="Automatic backup skipped: set a backup password first."
+def backup_password_status():
+    """What the Backup card shows: is a password remembered (OS keyring), is a keyring there at all, the minimum length, and
+    whether encryption at rest protects backups with the PIN instead."""
+    from Cores import backup_password as _bp
+    return {"remembered":_bp.has(),"keyring":_bp.available(),"min_len":_bp.MIN_LEN,"at_rest":bool(_common_db.encryption_configured())}
+def get_backup_notice():
+    d=_read_settings();b=d.get("backup",{}) if isinstance(d,dict) else {}
+    n=b.get("notice") if isinstance(b,dict) else None
+    return n if isinstance(n,dict) and n.get("text") else None
+@_settings_lock.serialized
+def _set_backup_notice(text):
+    d=_read_settings()
+    if not isinstance(d,dict):d={}
+    cur=d.get("backup",{}) if isinstance(d.get("backup",{}),dict) else {}
+    if text:cur["notice"]={"text":str(text),"at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())}
+    elif "notice" in cur:cur.pop("notice",None)
+    else:return True
+    d["backup"]=cur
+    return _write_settings(d)
+def clear_backup_notice():
+    try:return _set_backup_notice("")
+    except Exception:return False
 def auto_backup_if_needed():
     cfg=_get_backup_settings()
     if not cfg.get("auto_enabled"):return False,"Auto backup disabled."
@@ -462,6 +456,12 @@ def auto_backup_if_needed():
         _,mt,_=back.latest()
         interval=int(cfg.get("interval_hours",24))*3600
         if mt and (time.time()-float(mt))<interval:return False,"Recent backup exists."
+        # Never an unencrypted backup: without encryption at rest (unlocked) or a remembered backup password, skip with a notice.
+        from Cores import backup_password as _bp
+        if not (_common_db.encryption_configured() and _common_db.session_key() is not None) and not _bp.has():
+            _set_backup_notice(AUTO_BACKUP_SKIPPED)
+            _log("[!]",AUTO_BACKUP_SKIPPED)
+            return False,AUTO_BACKUP_SKIPPED
         out=back.create()
         try:back.trim(cfg.get("keep",20))
         except Exception:pass

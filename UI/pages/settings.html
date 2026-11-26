@@ -66,20 +66,22 @@
 </div>
 <div class="set-panel" data-tab-panel="backup">
 <div class="set-box glass-panel">
-<div class="set-box-title">Backup</div>
-<p class="set-info">Backs up the Data folder. Select a backup then Restore, or Restore with nothing selected to pick a backup ZIP from disk.</p>
+<div class="set-box-title">Full backup of this install</div>
+<p class="set-info">A full, always encrypted copy of this install's Data folder (settings and database included; CLI connection tokens are left out), to bring this install back. To move your work to another install or person, use Import &amp; Export > Export my work. Select a backup then Restore, or Restore with nothing selected to pick a backup file from disk. Restore always asks for the backup's password or PIN.</p>
 <div class="set-row">
-<label class="set-check"><input type="checkbox" id="setBkAutoToggle"><span>Enable auto backup</span></label>
+<label class="set-check"><input type="checkbox" id="setBkAutoToggle"><span>Enable auto backup (needs a remembered backup password, or encryption at rest)</span></label>
 <select id="setBkFreq" class="set-select"><option value="6">Every 6 hours</option><option value="24">Daily</option><option value="168">Weekly</option><option value="720">Monthly</option></select>
 <select id="setBkKeep" class="set-select"><option value="5">Keep 5</option><option value="10">Keep 10</option><option value="20">Keep 20</option><option value="50">Keep 50</option><option value="100">Keep 100</option></select>
 </div>
+<div class="set-status" id="setBkAutoNotice"></div>
+<div class="set-row"><span class="set-info" id="setBkPwState"></span><button type="button" class="set-btn danger hidden" id="setBkForgetPwBtn">Forget Backup Password</button></div>
 <div class="set-row"><button type="button" class="set-btn primary" id="setBkCreateBtn">Backup Now</button><button type="button" class="set-btn" id="setBkRestoreBtn">Restore Selected</button><button type="button" class="set-btn danger" id="setBkDeleteBtn">Delete Selected</button></div>
 <div class="set-table-wrap"><table class="set-table"><thead><tr><th class="set-col-check"></th><th>Backup</th><th>Modified</th><th>Size</th><th></th></tr></thead><tbody id="setBkTableBody"></tbody></table></div>
 <div class="set-status" id="setBkStatus"></div>
 </div>
 <div class="set-box glass-panel">
 <div class="set-box-title">Off-machine Backup Copy</div>
-<p class="set-info">On every scheduled/auto backup, also copy the resulting ZIP to a second folder - a synced folder (OneDrive/Dropbox) or mounted network share works, no cloud account setup needed.</p>
+<p class="set-info">On every scheduled/auto backup, also copy the resulting encrypted backup file to a second folder - a synced folder (OneDrive/Dropbox) or mounted network share works, no cloud account setup needed.</p>
 <div class="set-row"><input type="text" id="setBkOffsiteInput" class="set-input" placeholder="No folder set" readonly><button type="button" class="set-btn" id="setBkOffsiteBrowseBtn">Choose Folder...</button><button type="button" class="set-btn danger" id="setBkOffsiteClearBtn">Clear</button></div>
 <div class="set-status" id="setBkOffsiteStatus"></div>
 </div>
@@ -116,15 +118,15 @@
 <div class="set-panel set-ie-panel" data-tab-panel="importexport">
 <div class="set-box glass-panel">
 <div class="set-ie-head">
-<div class="set-ie-head-text"><div class="set-box-title">Import &amp; Export</div><p class="set-info">Export your data to a file, or import a file you exported before. Notes and Commands imports let you resolve conflicts per item.</p></div>
+<div class="set-ie-head-text"><div class="set-box-title">Import &amp; Export</div><p class="set-info">Export my work (notes, targets, reports, diagrams...) to a file you can share or move to another install, or import a file you exported before. Secrets and machine state never go in. Notes and Commands imports let you resolve conflicts per item.</p></div>
 <button type="button" class="set-ie-action" id="setIeOpenExportBtn"><i class="icon icon-save"></i><span>Export Data...</span></button>
 </div>
 <div class="set-ie-drop" id="setIeDrop" role="button" tabindex="0" aria-label="Import a file: drop it here or press Enter to browse">
 <i class="icon icon-add set-ie-drop-icon"></i>
-<div class="set-ie-drop-text"><strong>Drop a file here to import</strong><span>or click to browse - JSON, CSV, ZIP, SQLite DB, CherryTree (.ctd)</span></div>
+<div class="set-ie-drop-text"><strong>Drop a file here to import</strong><span>or click to browse - JSON, CSV, ZIP, LOYA work export (.loyawork), SQLite DB, CherryTree (.ctd)</span></div>
 <button type="button" class="set-ie-drop-alt" id="setIeOpenImportBtn" title="Pick the data type first, or import a Markdown folder">Choose type...</button>
 </div>
-<input type="file" id="setIeDropInput" class="hidden" accept=".json,.csv,.zip,.db,.sqlite,.ctd">
+<input type="file" id="setIeDropInput" class="hidden" accept=".json,.csv,.zip,.loyawork,.db,.sqlite,.ctd">
 <div class="set-status" id="setIeDropStatus"></div>
 </div>
 <div class="set-ie-grid">

@@ -22,7 +22,7 @@ from Cores import doc_store as _doc_store
 PROVIDERS=("claude","codex")
 PROVIDER_LABELS={"claude":"Claude Agent","codex":"OpenAI Codex"}
 PROVIDER_VENDORS={"claude":"Anthropic","codex":"OpenAI"}
-APP_CLIENT_ID="LOYA-NG/1.0.3"
+APP_CLIENT_ID="LOYA-NG/1.0.4"
 CLAUDE_SDK_PACKAGE="claude-agent-sdk"
 CLAUDE_SDK_VERSION="0.2.182"
 DEFAULT_CLAUDE_MODEL="claude-opus-5-5"

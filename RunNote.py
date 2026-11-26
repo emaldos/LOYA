@@ -9,7 +9,7 @@ try:
     from Cores.Update import sync_installed_version as _sync_installed_version
 except Exception:
     _UPDATE_APP_NAME="LOYA NG"
-    _DEFAULT_APP_VERSION="1.0.3"
+    _DEFAULT_APP_VERSION="1.0.4"
     _recovery=None
     def _get_app_version():
         return _DEFAULT_APP_VERSION

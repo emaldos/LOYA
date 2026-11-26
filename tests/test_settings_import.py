@@ -206,7 +206,10 @@ class ExportAllAndUpdateTest(_Base):
         finally:ss._health_check.data_dir=orig
         with zipfile.ZipFile(out) as z:
             names=z.namelist();man=json.loads(z.read("manifest.json"))
-        self.assertIn("Data/x.json",names);self.assertEqual(len(man["files"]),n);self.assertEqual(ss.import_all_info(out),n)
+        # Export my work is built from an allowlist: an unknown Data/ file never goes in, and nothing sits under Data/.
+        self.assertEqual("loya-work-export",man["format"]);self.assertEqual(len(names),n)
+        self.assertFalse([x for x in names if x.endswith("x.json") or x.startswith("Data/")],names)
+        self.assertIn("content.db",names);self.assertEqual(ss.import_all_info(out),sum(man["counts"].values()))
         empty=os.path.join(self.dir,"e.zip")
         with zipfile.ZipFile(empty,"w") as z:z.writestr("readme.txt","x")
         self.assertEqual(ss.import_all_info(empty),0)

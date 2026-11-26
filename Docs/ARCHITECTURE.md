@@ -89,6 +89,6 @@ It runs with whatever Python the user starts it with, and its job is to get a he
 ## Runtime folders
 - `Data/`: database, key file, settings, JSON stores, attachments, external agent workspaces, CVE index. Hardened to the current user at every start.
 - `Logs/`: launcher, app, crash, update and per feature logs.
-- `Backups/`: data backups, plain zips or encrypted `.loyabak`.
+- `Backups/`: data backups, always encrypted `.loyabak` (PIN-wrapped data key with encryption at rest on, else a backup password kept only in the OS keyring when remembered). Older plain zips still restore.
 - `Cores/Update/OldVersions/` and `Cores/Update/state.json`: code snapshots and updater state.
 None of these are in git. The root [README](../README.md#reference) lists every runtime path.

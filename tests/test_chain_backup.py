@@ -16,6 +16,13 @@ from test_chain_history import GRAPH,status,add_log
 EPIN="482193"
 FAST_KDF={"name":"argon2id","m_kib":8192,"t":1,"p":1} if crypto_store.has_argon2() else {"name":"scrypt","n":2**14,"r":8,"p":1}
 SETTINGS={"cve":{"nvd_api_key_set":True,"watchlist":["openssl"],"feed":{"kev":True}},"ai":{"permissions":{"notes_read":"allow","chain_history_delete":"deny"}},"extensions":{"flows":{"script_isolation":"sandboxed"}}}
+BKPW="test-backup-pw"
+def backup_zip(out):
+    """The zip inside an encrypted backup (password-protected .loyabak), decrypted next to it for inspection."""
+    from Cores import loyabak
+    zp=out+".inspect.zip"
+    with loyabak.unwrap(out,BKPW) as k:loyabak.decrypt_to(out,zp,k)
+    return zp
 def table_counts():
     with common_db.connection() as con:
         return {t:n for t,n in db_driver.row_counts(con).items() if n}
@@ -65,14 +72,14 @@ class PlainBackupTest(Base):
         self.seed()
         before=table_counts()
         for t in ("ChainGraphs","ChainRuns","ChainRunLogs","Playbooks","Reports","ReportFindings","CveRecords","AppDocs"):self.assertIn(t,before)
-        out=backup_restore.create_data_backup(out_dir=self.out)
-        with zipfile.ZipFile(out) as z:
+        out=backup_restore.create_data_backup(out_dir=self.out,password=BKPW)
+        with zipfile.ZipFile(backup_zip(out)) as z:
             names=z.namelist()
             self.assertIn("Data/Note_LOYA_V1.db",names)
             self.assertFalse([n for n in names if n.endswith(("-journal","-wal","-shm"))],"the DB goes in as one consistent snapshot")
             self.assertFalse([n for n in names if "/.loya_backup_" in n or n.startswith("Data/cve_index")])
         self.fresh()
-        ok,msg=backup_restore.restore_data_backup(out,mode="replace")
+        ok,msg=backup_restore.restore_data_backup(out,mode="replace",password=BKPW)
         self.assertTrue(ok,msg)
         self.assertEqual(before,table_counts(),"every user table comes back row for row")
         self.assert_chains_back()
@@ -81,23 +88,23 @@ class PlainBackupTest(Base):
     def test_a_backup_never_holds_older_backups(self):
         self.seed()
         inside=os.path.join(self.dir,"Backups")
-        first=backup_restore.create_data_backup(out_dir=inside)
+        first=backup_restore.create_data_backup(out_dir=inside,password=BKPW)
         os.makedirs(os.path.join(self.dir,"cve_index"),exist_ok=True)
         with open(os.path.join(self.dir,"cve_index","big.db"),"wb") as fh:fh.write(b"x"*1000)
-        second=backup_restore.create_data_backup(out_dir=inside)
-        with zipfile.ZipFile(second) as z:names=z.namelist()
+        second=backup_restore.create_data_backup(out_dir=inside,password=BKPW)
+        with zipfile.ZipFile(backup_zip(second)) as z:names=z.namelist()
         self.assertFalse([n for n in names if n.startswith("Data/Backups/")],names)
         self.assertFalse([n for n in names if n.startswith("Data/cve_index/")])
         self.assertTrue(os.path.isfile(first))
     def test_merge_restore_adds_the_backups_missing_chains_and_runs(self):
         self.seed()
-        out=backup_restore.create_data_backup(out_dir=self.out)
+        out=backup_restore.create_data_backup(out_dir=self.out,password=BKPW)
         self.fresh()
         mine=flows.create("Recon",GRAPH,"mine")["playbook_id"]   # same name as the backup's chain: kept, not duplicated
         other=flows.create("Web sweep",GRAPH,"web")["playbook_id"]
         store.save_run(status("runMine",other,name="Web sweep",started="2026-11-23T08:00:00+00:00",ended="2026-11-23T08:00:01+00:00"))
         store.save_run(status("runA2",other,name="Web sweep",started="2026-11-23T09:00:00+00:00",ended="2026-11-23T09:00:01+00:00"))   # run_id collision: the live one stays
-        ok,msg=backup_restore.restore_data_backup(out,mode="merge")
+        ok,msg=backup_restore.restore_data_backup(out,mode="merge",password=BKPW)
         self.assertTrue(ok,msg)
         self.assertIn("chain run(s) added",msg)
         names=[c["name"] for c in flows.list_flows()]
@@ -139,9 +146,9 @@ class PlainBackupTest(Base):
             health_check.data_dir=real
         with zipfile.ZipFile(out) as z:
             names=z.namelist()
-            self.assertFalse([n for n in names if n.startswith("Data/cve_index/") or "/.loya_backup_" in n or n.startswith("Data/Backups/")])
+            self.assertFalse([n for n in names if "cve_index" in n or ".loya_backup_" in n or "Backups/" in n or n.startswith("Data/")])
             db=os.path.join(self.out,"x.db")
-            with open(db,"wb") as fh:fh.write(z.read("Data/Note_LOYA_V1.db"))
+            with open(db,"wb") as fh:fh.write(z.read("content.db"))
         con=db_driver.connect(db)
         try:counts=db_driver.row_counts(con)
         finally:con.close()
@@ -163,7 +170,7 @@ class ConnectionTokensStayOutTest(Base):
             self.assertTrue([n for n in names if n.endswith("external_agents/other/keep.json")],"only the tokens folder is left out")
     def test_plain_backup_leaves_the_tokens_out(self):
         self._tokens()
-        self._check(backup_restore.create_data_backup(out_dir=self.out))
+        self._check(backup_zip(backup_restore.create_data_backup(out_dir=self.out,password=BKPW)))
     def test_export_all_leaves_the_tokens_out(self):
         from Cores.Services import settings_service
         from Cores.Update import health_check
@@ -175,7 +182,11 @@ class ConnectionTokensStayOutTest(Base):
             settings_service.export_all_zip(out)
         finally:
             health_check.data_dir=real
-        self._check(out)
+        with zipfile.ZipFile(out) as z:
+            names=z.namelist()
+            # Export my work is an allowlist: no external_agents file at all, tokens or not.
+            self.assertFalse([n for n in names if "external_agents" in n],names)
+            self.assertFalse([n for n in names if b"SECRET-TEST-TOKEN" in z.read(n)])
 @unittest.skipUnless(db_driver.has_sqlcipher(),"sqlcipher3 not installed")
 class EncryptedBackupTest(Base):
     def test_loyabak_round_trip_keeps_chains_history_appdocs_and_secrets(self):
@@ -191,7 +202,7 @@ class EncryptedBackupTest(Base):
         hist.clear_runs();flows.revert_linear(self.a)
         with common_db.connection() as con:
             con.execute("DELETE FROM Secrets");con.execute("DELETE FROM AppDocs")
-        ok,msg=backup_restore.restore_data_backup(out,mode="replace")
+        ok,msg=backup_restore.restore_data_backup(out,mode="replace",pin=EPIN)
         self.assertTrue(ok,msg)
         after=table_counts()
         for t,n in before.items():
@@ -218,7 +229,7 @@ class EncryptedBackupTest(Base):
         self.assertTrue(ok,msg)
         out=backup_restore.create_data_backup(out_dir=self.out)
         hist.clear_runs()
-        ok,msg=backup_restore.restore_data_backup(out,mode="merge")
+        ok,msg=backup_restore.restore_data_backup(out,mode="merge",pin=EPIN)
         self.assertTrue(ok,msg)
         self.assertEqual({"runA1","runA2"},{r["run_id"] for r in hist.list_runs({})["items"]})
 if __name__=="__main__":

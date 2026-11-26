@@ -160,8 +160,11 @@ class BackupTests(_tup._TempRoot):
         self.write("Data/cve_index/cve_index.sqlite","big")
         self.write("Data/settings.json","{}")
         self.write("Data/Attachments/cve_index/keep.png","x")
-        out=br.create_data_backup(root_dir=self.root)
-        names=zipfile.ZipFile(out).namelist()
+        from Cores import loyabak
+        out=br.create_data_backup(root_dir=self.root,password="test-backup-pw")
+        zp=out+".zip"
+        with loyabak.unwrap(out,"test-backup-pw") as k:loyabak.decrypt_to(out,zp,k)
+        names=zipfile.ZipFile(zp).namelist()
         self.assertIn("Data/settings.json",names)
         self.assertIn("Data/Attachments/cve_index/keep.png",names)
         self.assertFalse([n for n in names if n.startswith("Data/cve_index/")])
@@ -328,7 +331,7 @@ class BackupZipLimitTests(_tup._TempRoot):
         self.assertEqual("[]",self.read_file("Data/Profiles/x/Targets.json"))
         self.assertFalse(os.path.exists(os.path.join(self.root,"Data","loyabak-manifest.json")))
         # As a .loyabak the decrypted zip sits in the restore temp folder: it must not be copied into Data/.
-        def fake_open(path,tmp,pin=None):
+        def fake_open(path,tmp,pin=None,password=None,trusted=False):
             zp=os.path.join(tmp,"backup.zip");shutil.copy(p,zp);return zp,None
         with mock.patch("Cores.loyabak.is_loyabak",return_value=True),mock.patch.object(br,"_open_loyabak",fake_open):
             ok,msg=br.restore_data_backup(p,"replace",root_dir=self.root)

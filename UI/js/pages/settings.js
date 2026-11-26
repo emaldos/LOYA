@@ -16,7 +16,7 @@ function setRefreshTabData(tab){
 if(!document.getElementById("setTagTableBody"))return
 if(tab==="tags")setRefreshTags().catch(()=>{})
 else if(tab==="recycle"){setRefreshRb().catch(()=>{});setRefreshRbRetention()}
-else if(tab==="backup")setRefreshBackups().catch(()=>{})
+else if(tab==="backup"){setRefreshBackups().catch(()=>{});setRefreshBackupPassword().catch(()=>{})}
 else if(tab==="update")setLoadUpdate()
 else if(tab==="cve"&&typeof cveMountSettings==="function")cveMountSettings(document.getElementById("setCveRoot"))
 }
@@ -570,7 +570,7 @@ setStatus("setSemanticStatus",`${st.doc_count} item(s) indexed`,false)
 function setDoRebuildSemanticIndex(){
 const btn=document.getElementById("setSemanticRebuildBtn")
 btn.disabled=true
-setStatus("setSemanticStatus","Rebuilding…",false)
+setStatus("setSemanticStatus","Rebuilding...",false)
 bridgeCall("ai.semantic_rebuild").then((r)=>{
 setStatus("setSemanticStatus",`Rebuilt - ${r.count} item(s) indexed (${r.mode==="embedding"?`embedding: ${r.embed_model}`:"keyword fallback"})`,false)
 setLoadSemanticStatus()
@@ -692,47 +692,129 @@ function setDoTestNotify(){
 setStatus("setNotifyStatus","Sending test notification...",false)
 bridgeCall("notifications.send_test").then((ok)=>{setStatus("setNotifyStatus",ok?"Test notification sent.":"Could not send a notification on this system.",!ok)}).catch((err)=>setStatus("setNotifyStatus",err&&err.message?err.message:"Failed",true))
 }
+// Backup password (encryption at rest off): every backup is a .loyabak under this password. A rough strength hint as the user
+// types; the bridge checks the real rule (minimum length) again before anything is written.
+function setPwStrength(pw){
+pw=String(pw||"")
+let s=0
+if(pw.length>=8)s++
+if(pw.length>=12)s++
+if(/[a-z]/.test(pw)&&/[A-Z]/.test(pw))s++
+if(/[0-9]/.test(pw))s++
+if(/[^A-Za-z0-9]/.test(pw))s++
+const score=Math.min(4,Math.max(0,s-(pw.length<8?1:0)))
+return {score,label:["Very weak","Weak","Fair","Good","Strong"][score]}
+}
+// opts: {needConfirm, minLen, remember (show "Remember for automatic backups"), label}. Resolves {password, remember} or null.
+function setPromptBackupPassword(title,message,opts){
+opts=opts||{}
+const minLen=opts.minLen|0
+const label=opts.label||"Password"
+return new Promise((resolve)=>{
+const pop=setOpenPopover(360)
+pop.innerHTML=`<div class="set-popover-title">${setEscapeHtml(title)}</div>${message?`<p class="set-info">${setEscapeHtml(message)}</p>`:""}<div class="set-popover-field"><label>${setEscapeHtml(label)}</label><input type="password" id="setBkPwInput1" autocomplete="new-password"></div>${opts.needConfirm?`<div class="set-popover-field"><label>Confirm ${setEscapeHtml(label.toLowerCase())}</label><input type="password" id="setBkPwInput2" autocomplete="new-password"></div><div class="set-info" id="setBkPwHint">${minLen?`At least ${minLen} characters.`:""}</div>`:""}${opts.remember?'<label class="set-check"><input type="checkbox" id="setBkPwRemember"><span>Remember for automatic backups (saved in the OS keyring)</span></label>':""}<div class="set-popover-error hidden" id="setBkPwErr"></div><div class="set-popover-actions"><button type="button" id="setBkPwCancel">Cancel</button><button type="button" class="set-popover-confirm" id="setBkPwOk">OK</button></div>`
+const input1=pop.querySelector("#setBkPwInput1")
+input1.focus()
+const hint=pop.querySelector("#setBkPwHint")
+if(hint)input1.addEventListener("input",()=>{const st=setPwStrength(input1.value);hint.textContent=(minLen&&input1.value.length<minLen?`At least ${minLen} characters. `:"")+(input1.value?"Strength: "+st.label:"")})
+function finish(val){setClosePopover();resolve(val)}
+pop.querySelector("#setBkPwCancel").addEventListener("click",()=>finish(null))
+pop.addEventListener("keydown",(e)=>{if(e.key==="Enter"){e.preventDefault();pop.querySelector("#setBkPwOk").click()}else if(e.key==="Escape"){e.preventDefault();finish(null)}})
+pop.querySelector("#setBkPwOk").addEventListener("click",()=>{
+const p1=input1.value
+const p2=opts.needConfirm?pop.querySelector("#setBkPwInput2").value:p1
+const errEl=pop.querySelector("#setBkPwErr")
+const fail=(t)=>{errEl.textContent=t;errEl.classList.remove("hidden")}
+if(!p1)return fail(label+" is required.")
+if(opts.needConfirm&&minLen&&p1.length<minLen)return fail(`Use at least ${minLen} characters.`)
+if(opts.needConfirm&&p1!==p2)return fail("The two entries do not match.")
+const rem=pop.querySelector("#setBkPwRemember")
+finish({password:p1,remember:!!(rem&&rem.checked)})
+})
+})
+}
 function setDoBackupNow(){
+bridgeCall("backup.password_status").catch(()=>({})).then((st)=>{
+st=st||{}
+// Encryption at rest on: the backup is sealed with the PIN-wrapped data key. A remembered password: used as it is.
+if(st.at_rest||st.remembered)return []
+return setPromptBackupPassword("Backup password","Full backups are always encrypted. Choose a password for this backup; you need it to restore.",{needConfirm:true,minLen:st.min_len||8,remember:st.keyring!==false}).then((p)=>p?[p.password,!!p.remember]:null)
+}).then((args)=>{
+if(!args){setStatus("setBkStatus","Backup cancelled.",false);return}
 setStatus("setBkStatus","Creating backup...",false)
-bridgeCall("backup.create").then((res)=>{
-setStatus("setBkStatus","Created: "+res.name,false)
+return bridgeCall("backup.create",args).then((res)=>{
+setStatus("setBkStatus","Created: "+res.name+(res.remember_error?" | "+res.remember_error:""),!!res.remember_error)
 showStatusIsland("Backup complete","success")
 setRefreshBackups()
+setRefreshBackupPassword()
+})
 }).catch((err)=>{
 setStatus("setBkStatus",err&&err.message?err.message:"Failed",true)
 showStatusIsland(err&&err.message?err.message:"Backup failed","error")
 })
 }
+// The Backup card: is a password remembered (auto backups need one unless encryption at rest is on), and any skipped-backup notice.
+function setRefreshBackupPassword(){
+return Promise.all([bridgeCall("backup.password_status").catch(()=>({})),bridgeCall("backup.notice").catch(()=>"")]).then(([st,notice])=>{
+st=st||{}
+const el=document.getElementById("setBkPwState")
+if(el)el.textContent=st.at_rest?"Backups are encrypted with your PIN (encryption at rest is on).":st.remembered?"A backup password is remembered in the OS keyring for automatic backups.":"No backup password is remembered. Automatic backups need one: make a backup and tick Remember for automatic backups."
+const forget=document.getElementById("setBkForgetPwBtn")
+if(forget)forget.classList.toggle("hidden",!st.remembered)
+const auto=document.getElementById("setBkAutoNotice")
+const autoOn=document.getElementById("setBkAutoToggle")
+const msg=notice||((autoOn&&autoOn.checked&&!st.at_rest&&!st.remembered)?"Automatic backups are skipped until a backup password is set.":"")
+if(auto){auto.textContent=msg;auto.classList.toggle("error",!!msg)}
+return st
+})
+}
+function setDoForgetBackupPassword(){
+appConfirm("Forget the remembered backup password? Automatic backups stop until you set one again.",{okLabel:"Forget",danger:true}).then((yes)=>{
+if(!yes)return
+return bridgeCall("backup.forget_password").then(()=>{setStatus("setBkStatus","Backup password forgotten.",false);return setRefreshBackupPassword()})
+}).catch((err)=>setStatus("setBkStatus",err&&err.message?err.message:"Failed",true))
+}
 function setChooseRestoreMode(name,files){
 return new Promise((resolve)=>{
 const pop=setOpenPopover(340)
-pop.innerHTML=`<div class="set-popover-title">Restore from ${setEscapeHtml(name)}</div>${files?`<p class="set-info">Files: ${files|0}</p>`:""}<p class="set-info">Merge keeps existing files and adds or updates from the ZIP. Replace swaps the Data folder for the ZIP contents.</p><div class="set-popover-actions"><button type="button" id="setModeCancel">Cancel</button><button type="button" id="setModeMerge">Merge</button><button type="button" class="set-popover-confirm" id="setModeReplace">Replace</button></div>`
+pop.innerHTML=`<div class="set-popover-title">Restore from ${setEscapeHtml(name)}</div>${files?`<p class="set-info">Files: ${files|0}</p>`:""}<p class="set-info">Merge keeps existing files and adds what is missing from the backup. Replace swaps the Data folder for the backup contents.</p><div class="set-popover-actions"><button type="button" id="setModeCancel">Cancel</button><button type="button" id="setModeMerge">Merge</button><button type="button" class="set-popover-confirm" id="setModeReplace">Replace</button></div>`
 pop.querySelector("#setModeCancel").addEventListener("click",()=>{setClosePopover();resolve("")})
 pop.querySelector("#setModeMerge").addEventListener("click",()=>{setClosePopover();resolve("merge")})
 pop.querySelector("#setModeReplace").addEventListener("click",()=>{setClosePopover();resolve("replace")})
 })
 }
-// An encrypted .loyabak made under another PIN (or on another machine) opens only with that PIN: ask for it, never guess.
-// A backup under this session's data key keeps the current key file (and PIN) by itself. Another key replaces it: the current
-// PIN re-wraps the backup's key so the PIN does not change; skipping that brings the backup's PIN back, after a clear warning.
+// Restore always asks before anything is touched: the backup password ("password" backups), or the PIN ("pin" backups, made with
+// encryption at rest on). A backup made under another PIN asks for that PIN; Replace then offers to keep the current PIN (it
+// re-wraps the backup's key), and skipping that brings the backup's PIN back after a clear warning. An old plain .zip restores
+// after a one-line warning that it was not encrypted.
 const SET_BACKUP_PIN_WARNING="This backup uses the PIN that was set when it was made. After restore, unlock with that PIN."
+const SET_BACKUP_PLAIN_WARNING="This old backup was not encrypted. Restore it anyway? Afterwards, make an encrypted backup and delete this one."
 function setBackupPin(inspectFn,path,mode){
 return bridgeCall(inspectFn,[path]).then((chk)=>{
-if(!chk||!chk.needs_pin)return {pin:null,current_pin:null}
-return setPromptPin("Backup PIN","This encrypted backup was made under a different PIN. Enter the PIN that was set when it was made.",false).then((pin)=>{
+chk=chk||{}
+const protect=chk.protect||(chk.encrypted?"pin":"none")
+if(protect==="password"||chk.needs_password){
+return setPromptBackupPassword("Backup password","Enter the password this backup was made with.",{}).then((p)=>p?{pin:null,current_pin:null,password:p.password}:null)
+}
+if(protect==="none"){
+if(!chk.legacy_plain&&!chk.needs_pin)return {pin:null,current_pin:null,password:null}
+if(!chk.needs_pin)return appConfirm(SET_BACKUP_PLAIN_WARNING,{okLabel:"Restore anyway"}).then((yes)=>yes?{pin:null,current_pin:null,password:null}:null)
+}
+const msg=chk.needs_pin?"This encrypted backup was made under a different PIN. Enter the PIN that was set when it was made.":"Enter your PIN to restore this encrypted backup."
+return setPromptPin("Backup PIN",msg,false).then((pin)=>{
 if(pin===null)return null
-if(mode!=="replace")return {pin,current_pin:null}
+if(mode!=="replace"||!chk.needs_pin)return {pin,current_pin:null,password:null}
 return setPromptPin("Keep your current PIN","Enter your current PIN to keep using it after the restore. Skip to switch to the backup's PIN.",false,"Skip").then((cur)=>{
 if(cur===null)return null
-if(cur)return {pin,current_pin:cur}
-return appConfirm(SET_BACKUP_PIN_WARNING,{okLabel:"Restore anyway",danger:true}).then((yes)=>yes?{pin,current_pin:null}:null)
+if(cur)return {pin,current_pin:cur,password:null}
+return appConfirm(SET_BACKUP_PIN_WARNING,{okLabel:"Restore anyway",danger:true}).then((yes)=>yes?{pin,current_pin:null,password:null}:null)
 })
 })
 })
 }
 function setDoRestoreSelected(){
 const sel=Array.from(setState.backupSelected)
-const pick=sel.length?Promise.resolve({path:sel[0],name:(setState.backups.find((x)=>x.path===sel[0])||{}).name||sel[0]}):bridgeCall("importExport.pick_import_all")
+const pick=sel.length?Promise.resolve({path:sel[0],name:(setState.backups.find((x)=>x.path===sel[0])||{}).name||sel[0]}):bridgeCall("backup.pick_restore")
 pick.then((src)=>{
 if(!src)return
 return setChooseRestoreMode(src.name,src.files).then((mode)=>{
@@ -740,7 +822,7 @@ if(!mode)return
 return setBackupPin("backup.needs_pin",src.path,mode).then((p)=>{
 if(!p){setStatus("setBkStatus","Restore cancelled.",false);return}
 setStatus("setBkStatus","Restoring...",false)
-return bridgeCall("backup.restore",[src.path,mode,p.pin,p.current_pin]).then((msg)=>setStatus("setBkStatus",msg,false))
+return bridgeCall("backup.restore",[src.path,mode,p.pin,p.current_pin,p.password]).then((msg)=>setStatus("setBkStatus",msg,false))
 })
 })
 }).catch((err)=>setStatus("setBkStatus",err&&err.message?err.message:"Failed",true))
@@ -909,7 +991,7 @@ return bridgeCall("recycleBin.purge_all").then((n)=>{setState.rbSelected.clear()
 }).catch((err)=>setStatus("setRbStatus",err&&err.message?err.message:"Failed",true))
 }
 const SET_IE_ENTITIES={
-all:{label:"All Data (full backup ZIP)",formats:null},
+all:{label:"Export my work (notes, targets, reports, diagrams...)",formats:null},
 target_values:{label:"Target Values",formats:["json","csv"],exportFn:"export_target_values",pickFn:"pick_target_values_import",applyFn:"apply_target_values_import"},
 targets:{label:"Targets",formats:["json","csv"],exportFn:"export_targets",pickFn:"pick_targets_import",applyFn:"apply_targets_import"},
 notes:{label:"Notes",formats:["json","csv","markdown","json_all","csv_zip","db"],importFormats:["json","csv","json_all","csv_zip","db","markdown_folder","cherrytree"],exportFn:"export_notes",pickFn:"pick_notes_import",applyFn:"apply_notes_import"},
@@ -918,11 +1000,11 @@ commands:{label:"Commands",formats:["json","csv"],exportFn:"export_commands",pic
 const SET_IE_FORMAT_LABELS={json:"JSON",csv:"CSV",markdown:"Markdown (ZIP)",markdown_folder:"Markdown folder (Obsidian / Joplin)",cherrytree:"CherryTree (.ctd)",json_all:"JSON - all tables (Notes + Commands)",csv_zip:"CSV ZIP - all tables",db:"SQLite database (.db)"}
 const SET_IE_PICK_FORMAT={json_all:"json"}
 // Dropped or browsed files: which formats each data type accepts for the file's extension ("all" = a full backup ZIP).
-const SET_IE_EXT_FORMATS={json:["json","json_all"],csv:["csv"],zip:["csv_zip"],db:["db"],sqlite:["db"],ctd:["cherrytree"]}
+const SET_IE_EXT_FORMATS={json:["json","json_all"],csv:["csv"],zip:["csv_zip"],loyawork:[],db:["db"],sqlite:["db"],ctd:["cherrytree"]}
 function setIeFileExt(name){const m=/\.([a-z0-9]+)$/i.exec(String(name||""));return m?m[1].toLowerCase():""}
 function setIeDropFormats(what,drop){
 const ext=setIeFileExt(drop.name)
-if(what==="all")return ext==="zip"?["all"]:[]
+if(what==="all")return (ext==="zip"||ext==="loyawork")?["all"]:[]
 const cfg=SET_IE_ENTITIES[what];if(!cfg||!cfg.formats)return []
 const allowed=cfg.importFormats||cfg.formats.filter((f)=>f!=="markdown")
 return (SET_IE_EXT_FORMATS[ext]||[]).filter((f)=>allowed.includes(f))
@@ -937,19 +1019,103 @@ return "notes"
 function setIeEntityOptions(drop){
 return Object.keys(SET_IE_ENTITIES).filter((k)=>!drop||setIeDropFormats(k,drop).length).map((k)=>`<option value="${k}">${setEscapeHtml(SET_IE_ENTITIES[k].label)}</option>`).join("")
 }
+// Export my work: content only (notes, commands, Quick Space, targets and profiles, reports, diagrams), never secrets or
+// machine state. Run history is on by default (its run variables are stripped); settings and AI chats are opt-in.
+const SET_IE_KIND_LABELS={notes:"Notes",note_versions:"Note versions",attachments:"Attachments",commands:"Commands",command_notes:"Command notes",quick_space:"Quick Space items",target_profiles:"Target profiles",targets:"Targets",target_values:"Target values",reports:"Reports",report_templates:"Report templates",findings_library:"Findings library",evidence:"Evidence",chains:"Chains / diagrams",chain_runs:"Chain runs",chain_files:"Chain files",tag_colors:"Tag colours",notes_meta:"Notes layout",settings:"Settings",ai_chats:"AI chats"}
+function setIeAllOptsHtml(){
+return `<div class="set-ie-field set-ie-all-opts hidden" id="setIeExpAllOpts"><p class="set-info">Only your work goes in the file. API keys, PIN data, CLI connection tokens, the audit log, logs and other machine state never do.</p><label class="set-check"><input type="checkbox" id="setIeExpRunHistory" checked><span>Include chain run history (run variables are removed)</span></label><label class="set-check"><input type="checkbox" id="setIeExpSettings"><span>Include settings (theme, appearance, AI Roles, CVE options; no keys)</span></label><label class="set-check"><input type="checkbox" id="setIeExpAiChats"><span>Include AI chats (they can hold pasted secrets)</span></label><label class="set-check"><input type="checkbox" id="setIeExpProtect"><span>Protect the export with a password</span></label><div class="set-ie-pw hidden" id="setIeExpPwWrap"><div class="set-popover-field"><label>Password</label><input type="password" id="setIeExpPw1" autocomplete="new-password"></div><div class="set-popover-field"><label>Confirm password</label><input type="password" id="setIeExpPw2" autocomplete="new-password"></div><div class="set-info" id="setIeExpPwHint"></div></div></div>`
+}
+// The export options from the dialog, checked; {error} when the password entries are not usable.
+function setIeExportAllOpts(root,minLen){
+const q=(id)=>root.querySelector("#"+id)
+const opts={include_run_history:!!q("setIeExpRunHistory").checked,include_settings:!!q("setIeExpSettings").checked,include_ai_chats:!!q("setIeExpAiChats").checked,password:null}
+if(q("setIeExpProtect").checked){
+const p1=q("setIeExpPw1").value,p2=q("setIeExpPw2").value
+minLen=minLen|0||8
+if(!p1)return {error:"Enter a password, or untick Protect the export with a password."}
+if(p1.length<minLen)return {error:`Use at least ${minLen} characters.`}
+if(p1!==p2)return {error:"The two passwords do not match."}
+opts.password=p1;opts.confirm=p2
+}
+return opts
+}
+function setIeDoExportAll(root,statusEl){
+bridgeCall("importExport.export_all_info").catch(()=>({})).then((info)=>{
+info=info||{}
+const opts=setIeExportAllOpts(root,info.min_len)
+if(opts.error){statusEl.textContent=opts.error;statusEl.classList.add("error");return}
+// Encryption at rest on and no password: the file would be readable by anyone, so the PIN is typed again (and audited).
+const pinStep=(!opts.password&&info.at_rest)?setPromptPin("Unprotected export",(info.warning||"This export is not encrypted.")+" Enter your PIN to continue, or cancel and tick Protect the export with a password.",false):Promise.resolve("")
+return pinStep.then((pin)=>{
+if(pin===null){statusEl.textContent="Cancelled.";return}
+if(pin)opts.pin=pin
+return bridgeCall("importExport.export_all",[opts]).then((res)=>{
+if(!res){statusEl.textContent="Cancelled.";return}
+const n=Object.values(res.counts||{}).reduce((a,b)=>a+(b|0),0)
+statusEl.textContent=`Created: ${res.name} (${n} item(s)${res.protected?", password protected":", NOT encrypted"})`
+})
+})
+}).catch((err)=>{statusEl.textContent=err&&err.message?err.message:"Failed";statusEl.classList.add("error")})
+}
+// Import my work: password if the file is protected, then a preview (counts per kind, clashes), then Merge or Replace content.
+function setIeImportPreviewHtml(pv){
+const counts=pv.counts||{},clashes=pv.clashes||{}
+const rows=Object.keys(counts).filter((k)=>counts[k]).map((k)=>{const c=(clashes[k]||[]).length;return `<tr><td>${setEscapeHtml(SET_IE_KIND_LABELS[k]||k)}</td><td>${counts[k]|0}</td><td>${c?c+" already here":""}</td></tr>`}).join("")
+const nClash=Object.values(clashes).reduce((a,b)=>a+((b||[]).length),0)
+return `<div class="set-popover-title">Import my work</div><p class="set-info">${pv.format==="legacy"?"Old full-data export: only your work is read from it; keys, tokens, logs and machine files in it are ignored.":"LOYA work export"}${pv.app_version?" from LOYA NG "+setEscapeHtml(pv.app_version):""}.</p><div class="set-table-wrap"><table class="set-table" id="setIeImpPreview"><thead><tr><th>Item</th><th>In file</th><th>Clashes</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Nothing to import.</td></tr>'}</tbody></table></div>${(pv.ignored||[]).length?`<p class="set-info">Ignored ${pv.ignored.length} secret or machine file(s).</p>`:""}<div class="set-ie-field"><label class="set-check"><input type="radio" name="setIeImpMode" value="merge" checked><span>Merge: add what is missing</span></label><label class="set-check"><input type="radio" name="setIeImpMode" value="replace"><span>Replace my content with the file's</span></label></div>${nClash?`<div class="set-ie-field" id="setIeImpClashWrap"><div class="set-info">${nClash} item(s) have the same name as one here:</div><label class="set-check"><input type="radio" name="setIeImpClash" value="rename" checked><span>Import as a copy (adds "(imported)")</span></label><label class="set-check"><input type="radio" name="setIeImpClash" value="skip"><span>Skip it, keep mine</span></label></div>`:""}${pv.has_settings?'<label class="set-check"><input type="checkbox" id="setIeImpApplySettings"><span>Apply the settings in this file</span></label>':""}<p class="set-info">Imported chains must be reviewed again before they run. Your keys, PIN, tokens and settings stay as they are${pv.has_settings?" unless you tick Apply settings":""}.</p><div class="set-popover-actions"><button type="button" id="setIeImpPvCancel">Cancel</button><button type="button" class="set-popover-confirm" id="setIeImpPvOk">Import</button></div>`
+}
+function setIeChooseImportAll(pv){
+return new Promise((resolve)=>{
+const pop=setOpenPopover(460)
+pop.innerHTML=setIeImportPreviewHtml(pv)
+const val=(name,def)=>{const r=pop.querySelector(`input[name="${name}"]:checked`);return r?r.value:def}
+pop.querySelector("#setIeImpPvCancel").addEventListener("click",()=>{setClosePopover();resolve(null)})
+pop.querySelector("#setIeImpPvOk").addEventListener("click",()=>{
+const ap=pop.querySelector("#setIeImpApplySettings")
+const opts={mode:val("setIeImpMode","merge"),clash:val("setIeImpClash","rename"),apply_settings:!!(ap&&ap.checked)}
+setClosePopover();resolve(opts)
+})
+})
+}
+function setIeDoImportAll(drop,statusEl){
+bridgeCall("importExport.pick_import_all",drop?[drop.path]:[]).then((src)=>{
+if(!src)return
+const pw=src.protected?setPromptBackupPassword("Export password","This export is protected with a password. Enter it to continue.",{}).then((p)=>p?p.password:null):Promise.resolve("")
+return pw.then((password)=>{
+if(password===null){statusEl.textContent="Import cancelled.";return}
+statusEl.textContent="Reading..."
+return bridgeCall("importExport.preview_import_all",[src.path,password||null,null]).then((pv)=>{
+statusEl.textContent=""
+return setIeChooseImportAll(pv||{}).then((opts)=>{
+if(!opts){statusEl.textContent="Import cancelled.";return}
+const sure=opts.mode==="replace"?appConfirm("Replace your notes, commands, targets, reports and diagrams with the file's content? Your keys, PIN and settings stay.",{okLabel:"Replace",danger:true}):Promise.resolve(true)
+return sure.then((yes)=>{
+if(!yes){statusEl.textContent="Import cancelled.";return}
+opts.password=password||null
+statusEl.textContent="Working..."
+return bridgeCall("importExport.apply_import_all",[src.path,opts]).then((res)=>{statusEl.textContent=(res&&res.message)||"Import done."})
+})
+})
+})
+})
+}).catch((err)=>{statusEl.textContent=err&&err.message?err.message:"Failed";statusEl.classList.add("error")})
+}
 function setOpenExportModal(){
 const el=document.createElement("div")
 el.className="set-ie-modal glass-panel"
-el.innerHTML=`<div class="set-ie-modal-title">Export Data</div><div class="set-ie-field"><label>What to export</label><select id="setIeExpWhat" class="set-select">${setIeEntityOptions()}</select></div><div class="set-ie-field" id="setIeExpFormatWrap"><label>Format</label><select id="setIeExpFormat" class="set-select"></select></div><div class="set-status" id="setIeExpStatus"></div><div class="set-ie-modal-actions"><button type="button" id="setIeExpCancel">Cancel</button><button type="button" class="set-ie-confirm" id="setIeExpConfirm">Export</button></div>`
+el.innerHTML=`<div class="set-ie-modal-title">Export Data</div><div class="set-ie-field"><label>What to export</label><select id="setIeExpWhat" class="set-select">${setIeEntityOptions()}</select></div><div class="set-ie-field" id="setIeExpFormatWrap"><label>Format</label><select id="setIeExpFormat" class="set-select"></select></div>${setIeAllOptsHtml()}<div class="set-status" id="setIeExpStatus"></div><div class="set-ie-modal-actions"><button type="button" id="setIeExpCancel">Cancel</button><button type="button" class="set-ie-confirm" id="setIeExpConfirm">Export</button></div>`
 openModal(el)
 function refreshFormats(){
 const cfg=SET_IE_ENTITIES[document.getElementById("setIeExpWhat").value]
 const wrap=document.getElementById("setIeExpFormatWrap")
+document.getElementById("setIeExpAllOpts").classList.toggle("hidden",!!cfg.formats)
 if(!cfg.formats){wrap.classList.add("hidden");return}
 wrap.classList.remove("hidden")
 document.getElementById("setIeExpFormat").innerHTML=cfg.formats.map((f)=>`<option value="${f}">${SET_IE_FORMAT_LABELS[f]}</option>`).join("")
 }
 document.getElementById("setIeExpWhat").addEventListener("change",refreshFormats)
+document.getElementById("setIeExpProtect").addEventListener("change",(e)=>document.getElementById("setIeExpPwWrap").classList.toggle("hidden",!e.target.checked))
+document.getElementById("setIeExpPw1").addEventListener("input",(e)=>{const v=e.target.value;document.getElementById("setIeExpPwHint").textContent=v?"Strength: "+setPwStrength(v).label:""})
 refreshFormats()
 document.getElementById("setIeExpCancel").addEventListener("click",closeModal)
 document.getElementById("setIeExpConfirm").addEventListener("click",()=>{
@@ -957,10 +1123,7 @@ const what=document.getElementById("setIeExpWhat").value
 const statusEl=document.getElementById("setIeExpStatus")
 statusEl.classList.remove("error")
 statusEl.textContent="Working..."
-if(what==="all"){
-bridgeCall("importExport.export_all").then((res)=>{statusEl.textContent=res?`Created: ${res.name} (${res.files} file(s))`:"Cancelled."}).catch((err)=>{statusEl.textContent=err&&err.message?err.message:"Failed";statusEl.classList.add("error")})
-return
-}
+if(what==="all"){setIeDoExportAll(el,statusEl);return}
 const fmt=document.getElementById("setIeExpFormat").value
 // Encryption at rest on: a full plain copy (SQLite DB) is written only after the PIN is typed again, with an explicit warning.
 bridgeCall("importExport.export_needs_pin",[what,fmt]).then((chk)=>{
@@ -1165,7 +1328,7 @@ const ext=setIeFileExt(file.name)
 if(!SET_IE_EXT_FORMATS[ext]){say(`"${file.name}" is not an importable file. Use JSON, CSV, ZIP, SQLite DB or CherryTree (.ctd).`,true);return}
 if(file.size>SET_IE_UPLOAD_MAX){say("That file is larger than 100 MB.",true);return}
 say("Reading "+file.name+"...")
-return setIeReadB64(file).then((b64)=>bridgeCall("importExport.stage_upload",[file.name,b64])).then((up)=>(ext==="zip"?bridgeCall("importExport.sniff_upload",[up.path]).catch(()=>({})):setIeSniffReport(up,file,ext)).then((sn)=>{
+return setIeReadB64(file).then((b64)=>bridgeCall("importExport.stage_upload",[file.name,b64])).then((up)=>((ext==="zip"||ext==="loyawork")?bridgeCall("importExport.sniff_upload",[up.path]).catch(()=>({})):setIeSniffReport(up,file,ext)).then((sn)=>{
 say("")
 if(sn&&sn.report)return
 const drop={path:up.path,name:file.name,guess:(sn&&sn.what)||setIeGuessEntity(file.name),format:(sn&&sn.format)||""}
@@ -1247,20 +1410,7 @@ document.getElementById("setIeImpConfirm").addEventListener("click",()=>{
 const what=document.getElementById("setIeImpWhat").value
 const statusEl=document.getElementById("setIeImpStatus")
 statusEl.classList.remove("error")
-if(what==="all"){
-bridgeCall("importExport.pick_import_all",drop?[drop.path]:[]).then((src)=>{
-if(!src)return
-return setChooseRestoreMode(src.name,src.files).then((mode)=>{
-if(!mode){statusEl.textContent="Import cancelled.";return}
-return setBackupPin("importExport.import_needs_pin",src.path,mode).then((p)=>{
-if(!p){statusEl.textContent="Import cancelled.";return}
-statusEl.textContent="Working..."
-return bridgeCall("importExport.apply_import_all",[src.path,mode,p.pin,p.current_pin]).then((msg)=>{statusEl.textContent=msg})
-})
-})
-}).catch((err)=>{statusEl.textContent=err&&err.message?err.message:"Failed";statusEl.classList.add("error")})
-return
-}
+if(what==="all"){setIeDoImportAll(drop,statusEl);return}
 const fmt=SET_IE_PICK_FORMAT[document.getElementById("setIeImpFormat").value]||document.getElementById("setIeImpFormat").value
 const cfg=SET_IE_ENTITIES[what]
 bridgeCall(`importExport.${cfg.pickFn}`,drop?[fmt,drop.path]:[fmt]).then((res)=>{
@@ -1430,7 +1580,8 @@ document.getElementById("setAuditExpiryToggle").addEventListener("change",()=>{s
 document.getElementById("setAuditExpirySaveBtn").addEventListener("click",setDoSaveAuditExpiry)
 document.getElementById("setAuditExpiryAmount").addEventListener("keydown",(e)=>{if(e.key==="Enter")setDoSaveAuditExpiry()})
 document.getElementById("setAuditExpiryAmount").addEventListener("input",(e)=>{const v=e.target.value.replace(/[^0-9]/g,"").slice(0,3);if(v!==e.target.value)e.target.value=v})
-document.getElementById("setBkAutoToggle").addEventListener("change",setSaveBackupSettings)
+document.getElementById("setBkAutoToggle").addEventListener("change",()=>{setSaveBackupSettings();setRefreshBackupPassword()})
+document.getElementById("setBkForgetPwBtn").addEventListener("click",setDoForgetBackupPassword)
 document.getElementById("setBkFreq").addEventListener("change",setSaveBackupSettings)
 document.getElementById("setBkKeep").addEventListener("change",setSaveBackupSettings)
 document.getElementById("setBkOffsiteBrowseBtn").addEventListener("click",setDoBrowseOffsiteDir)
@@ -1557,6 +1708,7 @@ if(typeof tshMountSettings==="function")tshMountSettings(document.getElementById
 setLoadAppearance()
 setLoadSecurity()
 setLoadBackupSettings()
+setRefreshBackupPassword().catch(()=>{})
 setLoadNotifySettings()
 setLoadUpdate()
 return Promise.all([setRefreshBackups(),setRefreshTags(),setRefreshRb(),setRefreshRbRetention()])

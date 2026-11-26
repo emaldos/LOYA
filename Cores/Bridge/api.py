@@ -1046,19 +1046,62 @@ class BackupAPI(BridgeModule):
         folder=_folder_dialog(self._window)
         if not folder:return None
         return folder if isinstance(folder,str) else folder[0]
-    def create(self):
-        out=self._get().create()
-        return {"path":out,"name":os.path.basename(out)}
+    def password_status(self):
+        """Backup password state for the Backup card: remembered in the OS keyring, keyring usable, the minimum length, and
+        whether encryption at rest is on (backups then use the PIN-wrapped data key and need no backup password)."""
+        from Cores import backup_password as _bp
+        try:remembered=bool(_bp.has())
+        except Exception:remembered=False
+        try:keyring_ok=bool(_bp.available())
+        except Exception:keyring_ok=False
+        return {"remembered":remembered,"keyring":keyring_ok,"min_len":int(getattr(_bp,"MIN_LEN",8)),"at_rest":bool(_common_db.encryption_configured() and _common_db.session_key() is not None)}
+    def check_password(self,password,confirm=None):
+        from Cores import backup_password as _bp
+        pw=str(password or "")
+        err=_bp.check(pw,pw if confirm is None else str(confirm))
+        try:strength=_bp.strength(pw)
+        except Exception:strength={"score":0,"label":""}
+        return {"error":err or "","strength":strength}
+    def forget_password(self):
+        from Cores import backup_password as _bp
+        _bp.forget()
+        return True
+    def notice(self):
+        try:return _settings_svc.get_backup_notice() or ""
+        except Exception:return ""
+    def clear_notice(self):
+        try:_settings_svc.clear_backup_notice()
+        except Exception:pass
+        return True
+    def create(self,password=None,remember=False):
+        from Cores import backup_password as _bp
+        pw=str(password or "") or None
+        if pw:
+            err=_bp.check(pw,pw)
+            if err:raise ValueError(err)
+        out=self._get().create(password=pw,remember=bool(remember))
+        res={"path":out,"name":os.path.basename(out)}
+        if pw and remember:
+            try:kept=bool(_bp.has())
+            except Exception:kept=False
+            if not kept:res["remember_error"]="The password could not be saved: no OS keyring is available, so automatic backups stay off."
+        return res
+    def pick_restore(self,staged=None):
+        """A backup file from disk (.loyabak, or an old plain .zip) for Restore with nothing selected."""
+        paths=_pick_paths(self._window,"Backup","loyabak",staged,extra_exts=("zip",))
+        if not paths:return None
+        p=paths[0]
+        return {"path":_remember_pick(p),"name":os.path.basename(p)}
     def needs_pin(self,path):
         """For an encrypted .loyabak: does it need its own PIN (made under another PIN/key than this session's)?"""
         real=_require_picked(path,[p for p,_mt,_sz in self._get().list()])
         return _update_backup.backup_needs_pin(real)
-    def restore(self,path,mode,pin=None,current_pin=None):
+    def restore(self,path,mode,pin=None,current_pin=None,password=None):
         # A backup from LOYA's own list, or a zip the user just picked (importExport.pick_import_all). pin: only for an encrypted
         # .loyabak made under another PIN (this installation's own backups open with the session key). current_pin: re-wraps such
         # a backup's key under the current PIN, so the restore does not bring the backup's PIN back.
         path=_require_picked(path,[p for p,_mt,_sz in self._get().list()])
-        ok,msg=self._get().restore(path,mode,pin=pin,current_pin=current_pin)
+        ok,msg=self._get().restore(path,mode,pin=pin,current_pin=current_pin,password=str(password or "") or None)
         if not ok:raise ValueError(msg)
         return msg
     def delete(self,paths):
@@ -1370,40 +1413,74 @@ class ImportExportAPI(BridgeModule):
         base,res=tg.apply_plan(base,plan,{int(k):v for k,v in (decisions or {}).items()})
         if not tg.save(base):raise ValueError("Save failed.")
         return res
-    def export_all(self):
-        paths=_save_dialog(self._window,"ZIP","zip",f"LOYA_All_export_{time.strftime('%Y%m%d_%H%M%S')}.zip")
+    # ---- Export my work / import it (Cores/Services/work_export.py, work_import.py). Imported lazily: the page still loads when
+    # one of them fails to import, and only this card reports the error.
+    def export_all_info(self):
+        """What the export dialog needs before it opens: is encryption at rest on (a plain export then needs the PIN), and the
+        password rule for a protected export."""
+        from Cores import backup_password as _bp
+        return {"at_rest":bool(_common_db.encryption_configured()),"min_len":int(getattr(_bp,"MIN_LEN",8)),"warning":_security_svc.PLAIN_EXPORT_WARNING}
+    def export_all(self,opts=None):
+        from Cores.Services import work_export as _wx
+        opts=opts if isinstance(opts,dict) else {}
+        password=str(opts.get("password") or "") or None
+        if password:
+            from Cores import backup_password as _bp
+            err=_bp.check(password,str(opts.get("confirm") if opts.get("confirm") is not None else password))
+            if err:raise ValueError(err)
+        pin=str(opts.get("pin") or "") or None
+        if not password and _common_db.encryption_configured():
+            # Fail before the save dialog; the service checks (and audits) again when it writes.
+            ok,msg=_security_svc.plain_export_allowed(pin,"work export",log_success=False)
+            if not ok:raise ValueError(msg)
+        ext="loyawork" if password else "zip"
+        paths=_save_dialog(self._window,"LOYA work export" if password else "ZIP",ext,f"LOYA_Work_export_{time.strftime('%Y%m%d_%H%M%S')}.{ext}")
         if not paths:return None
         out=paths if isinstance(paths,str) else paths[0]
-        n=_settings_svc.export_all_zip(out)
-        return {"path":out,"name":os.path.basename(out),"files":n}
+        res=_wx.export_work_zip(out,include_settings=bool(opts.get("include_settings")),include_run_history=opts.get("include_run_history",True) is not False,
+                                include_ai_chats=bool(opts.get("include_ai_chats")),password=password,pin=pin)
+        res=dict(res or {})
+        res.setdefault("path",out);res.setdefault("name",os.path.basename(out))
+        return res
     def pick_import_all(self,staged=None):
-        paths=_pick_paths(self._window,"Backup","zip",staged,extra_exts=("loyabak",))
+        from Cores.Services import work_import as _wi
+        paths=_pick_paths(self._window,"LOYA export","zip",staged,extra_exts=("loyawork","loyabak"))
         if not paths:return None
         p=paths[0]
-        if _update_backup.backup_needs_pin(p)["encrypted"]:
-            # An encrypted .loyabak: its file list is inside the ciphertext; the restore checks it after decrypting.
-            return {"path":_remember_pick(p),"name":os.path.basename(p),"files":0,"encrypted":True}
-        try:count=_settings_svc.import_all_info(p)
-        except Exception as e:raise ValueError(f"Invalid zip: {e}")
-        if count<=0:raise ValueError("This zip does not contain LOYA Data files.")
-        return {"path":_remember_pick(p),"name":os.path.basename(p),"files":count}
+        try:kind=_wi.detect(p)
+        except Exception as e:raise ValueError(f"Invalid file: {e}")
+        if kind=="backup":raise ValueError("This is a full backup of an install. Restore it from Settings > Backup instead.")
+        if not kind:raise ValueError("This file is not a LOYA work export.")
+        return {"path":_remember_pick(p),"name":os.path.basename(p),"kind":kind,"protected":kind=="work_protected"}
+    def preview_import_all(self,path,password=None,pin=None):
+        from Cores.Services import work_import as _wi
+        path=_require_picked(path)
+        return _wi.preview(path,password=str(password or "") or None,pin=str(pin or "") or None)
     def stage_upload(self,name,b64):
         return {"path":_stage_upload(name,b64),"name":os.path.basename(str(name or ""))}
     def sniff_upload(self,staged):
         """Best guess of what a staged file is, so the import dialog can preselect it."""
         p=_staged_path(staged);low=p.lower()
-        if low.endswith(".zip"):
-            try:n=_settings_svc.import_all_info(p)
-            except Exception:n=0
-            return {"what":"all" if n>0 else "notes","format":"csv_zip" if n<=0 else ""}
+        if low.endswith((".zip",".loyawork")):
+            try:
+                from Cores.Services import work_import as _wi
+                kind=_wi.detect(p)
+            except Exception:kind=""
+            return {"what":"all" if kind in ("work","work_protected","legacy") else "notes","format":"" if kind else "csv_zip"}
         return {"what":"","format":""}
     def import_needs_pin(self,path):
         return _update_backup.backup_needs_pin(_require_picked(path))
-    def apply_import_all(self,path,mode,pin=None,current_pin=None):
+    def apply_import_all(self,path,opts=None,pin=None,current_pin=None):
+        """opts: {mode: merge|replace, clash: rename|skip, password, apply_settings, pin}. A bare mode string (older pages) is
+        read as {mode}."""
         path=_require_picked(path)
-        ok,msg=_settings_svc.Backup().restore(path,mode,pin=pin,current_pin=current_pin)
-        if not ok:raise ValueError(msg)
-        return msg
+        from Cores.Services import work_import as _wi
+        if not isinstance(opts,dict):opts={"mode":opts,"pin":pin}
+        mode=str(opts.get("mode") or "merge")
+        if mode not in ("merge","replace"):raise ValueError("Invalid mode.")
+        clash=str(opts.get("clash") or "rename")
+        if clash not in ("rename","skip"):raise ValueError("Invalid clash choice.")
+        return _wi.apply(path,mode=mode,clash=clash,password=str(opts.get("password") or "") or None,apply_settings=bool(opts.get("apply_settings")),pin=str(opts.get("pin") or "") or None)
 class TemplatesAPI(BridgeModule):
     _HUMAN_EXT={"md":("Markdown","md"),"json":("JSON","json"),"csv":("CSV","csv")}
     def export_human(self,kind,fmt):

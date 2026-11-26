@@ -1042,7 +1042,7 @@ def http_request(method,url,headers=None,body="",timeout=30,verify_tls=True,foll
         if not name:continue
         if not _HEADER_NAME.match(name) or any(ch in value for ch in "\r\n\x00"):raise ValueError("Header %r is not valid."%name[:60])
         request.add_header(name,value);sent.add(name.lower())
-    if "user-agent" not in sent:request.add_header("User-Agent","LOYA-NG/1.0.3")
+    if "user-agent" not in sent:request.add_header("User-Agent","LOYA-NG/1.0.4")
     if data is not None and "content-type" not in sent and str(body).lstrip()[:1] in("{","["):request.add_header("Content-Type","application/json")
     context=ssl.create_default_context()
     if not verify_tls:
