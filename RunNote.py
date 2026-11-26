@@ -9,7 +9,7 @@ try:
     from Cores.Update import sync_installed_version as _sync_installed_version
 except Exception:
     _UPDATE_APP_NAME="LOYA NG"
-    _DEFAULT_APP_VERSION="1.0.2"
+    _DEFAULT_APP_VERSION="1.0.3"
     _recovery=None
     def _get_app_version():
         return _DEFAULT_APP_VERSION
@@ -362,6 +362,33 @@ def _venv_sees_system_site(venv_dir):
     except Exception:
         pass
     return False
+def _venv_cfg_python(venv_dir):
+    """The Python major.minor a venv was built for (pyvenv.cfg "version"/"version_info"), or "" when unknown."""
+    try:
+        with open(os.path.join(venv_dir,"pyvenv.cfg"),"r",encoding="utf-8") as f:
+            for line in f:
+                k,_,v=line.partition("=")
+                if k.strip().lower() in ("version","version_info"):
+                    m=re.match(r"\s*(\d+)\.(\d+)",v)
+                    if m:return f"{m.group(1)}.{m.group(2)}"
+    except Exception:
+        pass
+    return ""
+def _python_mm(py):
+    """The major.minor the given interpreter really runs as, or "" if it does not start. A venv's python is a link or a
+    redirector to the base Python, so a distro upgrade (3.13 -> 3.14) changes it under an existing venv."""
+    try:
+        r=subprocess.run([py,"-c","import sys;print('%d.%d'%sys.version_info[:2])"],capture_output=True,text=True,timeout=30)
+        out=(r.stdout or "").strip()
+        return out if r.returncode==0 and re.fullmatch(r"\d+\.\d+",out) else ""
+    except Exception:
+        return ""
+def _venv_python_changed(venv_dir,py):
+    """(changed, built_for, runs_as): True when the venv's packages were installed for another Python than the one its
+    interpreter now runs, so they are invisible to it (lib/python3.13 vs 3.14) and the venv must be rebuilt."""
+    built=_venv_cfg_python(venv_dir)
+    runs=_python_mm(py)
+    return bool(built and runs and built!=runs),built,runs
 def _ensure_venv(venv_dir):
     if os.path.isdir(venv_dir):
         return True,""
@@ -423,18 +450,21 @@ def _load_deps_state():
             return json.load(f)
     except Exception:
         return {}
-def _save_deps_state(reqs):
+def _save_deps_state(reqs,python=""):
     path=_abs("Data","deps_state.json")
     try:
         os.makedirs(os.path.dirname(path),exist_ok=True)
         with open(path,"w",encoding="utf-8") as f:
-            json.dump({"fingerprint":_deps_fingerprint(reqs),"ts":datetime.datetime.now().isoformat()},f)
+            json.dump({"fingerprint":_deps_fingerprint(reqs),"python":python or "","ts":datetime.datetime.now().isoformat()},f)
     except Exception:
         pass
-def _deps_up_to_date(reqs):
+def _deps_up_to_date(reqs,python=""):
+    """True when the requirements were installed for these requirements AND this venv Python (major.minor)."""
     if not reqs:
         return True
-    return _load_deps_state().get("fingerprint")==_deps_fingerprint(reqs)
+    st=_load_deps_state()
+    if st.get("fingerprint")!=_deps_fingerprint(reqs):return False
+    return not python or st.get("python","")==python
 _WEBVIEW2_CLIENT_GUID="{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 def _webview2_info():
     info={"ok":False,"version":""}
@@ -477,6 +507,14 @@ def _check_linux_webview_runtime(py):
     )
     rc,tail=_run([py,"-c",code],"Verifying WebKitGTK runtime")
     return rc==0,tail
+_CRITICAL_IMPORTS=("webview",)
+def _venv_imports_ok(py):
+    """The app's own critical packages import in the venv. A cached "requirements up to date" is not trusted without it."""
+    try:
+        r=subprocess.run([py,"-c","import "+",".join(_CRITICAL_IMPORTS)],capture_output=True,text=True,timeout=60)
+        return r.returncode==0
+    except Exception:
+        return False
 def _check_webview_runtime(py):
     if _is_win():
         info=_webview2_info()
@@ -536,6 +574,7 @@ def _launch_app(py,pyw,app_path):
         if out is not None:
             try:out.close()
             except Exception:pass
+_LAST_APP_PROC=None
 def _spawn_app(py,pyw,app_path,stdin,stdout,stderr):
     if _is_win():
         DETACHED_PROCESS=0x00000008
@@ -546,6 +585,8 @@ def _spawn_app(py,pyw,app_path,stdin,stdout,stderr):
         p=subprocess.Popen([exe,app_path],stdin=stdin,stdout=stdout,stderr=stderr,creationflags=flags,cwd=os.path.dirname(app_path))
     else:
         p=subprocess.Popen([py,app_path],stdin=stdin,stdout=stdout,stderr=stderr,start_new_session=True,cwd=os.path.dirname(app_path),env=_linux_app_env())
+    global _LAST_APP_PROC
+    _LAST_APP_PROC=p
     return True,"",int(getattr(p,"pid",0) or 0)
 _WIN_PROCESS_QUERY_LIMITED_INFORMATION=0x1000
 _WIN_STILL_ACTIVE=259
@@ -625,6 +666,27 @@ def _check_already_running():
     _log(f"Stale pid file ignored (PID: {pid})","WARN")
     _remove_pid_file()
     return False,0
+APP_ALIVE_WAIT=2.5
+def _app_died_early(proc,wait=APP_ALIVE_WAIT):
+    """Exit code if the just-launched app ended within `wait` seconds (a broken venv or an import error dies at once), else
+    None. Uses the Popen handle: on Linux a dead child stays a zombie, so a pid probe would still say "alive"."""
+    if proc is None:return None
+    end=time.time()+max(0.0,wait)
+    while time.time()<end:
+        rc=proc.poll()
+        if rc is not None:return rc
+        time.sleep(0.1)
+    return proc.poll()
+def _last_launch_output(max_lines=25):
+    """The app's own output since the last launch marker in Logs/app_output.log (where a startup traceback lands)."""
+    try:
+        with open(_abs("Logs","app_output.log"),"r",encoding="utf-8",errors="replace") as f:text=f.read()
+    except Exception:
+        return ""
+    i=text.rfind("=== ")
+    part=text[i:] if i>=0 else text
+    lines=[l for l in part.splitlines()[1:] if l.strip()]
+    return "\n".join(lines[-max_lines:])
 def main():
     global _VERBOSE
     args=_parse_args(sys.argv[1:])
@@ -704,13 +766,17 @@ def main():
     venv_dir=_abs(".venv_windows" if _is_win() else ".venv_linux")
     _py_check=os.path.join(venv_dir,"Scripts","python.exe") if _is_win() else os.path.join(venv_dir,"bin","python3")
     stale_site=os.path.isdir(venv_dir) and not _is_win() and not _venv_sees_system_site(venv_dir)
-    if os.path.isdir(venv_dir) and os.path.isfile(_py_check) and not stale_site:
+    py_changed,built_for,runs_as=(_venv_python_changed(venv_dir,_py_check) if os.path.isfile(_py_check) else (False,"",""))
+    py_dead=os.path.isfile(_py_check) and not runs_as and not _python_mm(_py_check)  # e.g. its base Python was removed
+    if os.path.isdir(venv_dir) and os.path.isfile(_py_check) and not stale_site and not py_changed and not py_dead:
         _step("ok","Virtual environment ready","(cached)")
         _log("Venv already exists")
     else:
         if os.path.isdir(venv_dir):
-            reason="Venv without system site-packages" if stale_site else "Incomplete venv"
-            _step("warn",f"{reason} detected, removing and recreating")
+            if py_changed:reason=f"Python changed from {built_for} to {runs_as}"
+            elif py_dead:reason="The environment's Python does not start"
+            else:reason="Venv without system site-packages" if stale_site else "Incomplete venv"
+            _step("warn",f"{reason} - rebuilding the virtual environment")
             _log(f"{reason} detected; removing before recreate")
             shutil.rmtree(venv_dir,ignore_errors=True)
         ok,tail=_ensure_venv(venv_dir)
@@ -742,7 +808,8 @@ def main():
             return 5
         _log(f"pip ready ({time.time()-t0:.1f}s)")
         _step("ok","pip ready",f"({time.time()-t0:.1f}s)")
-        if _deps_up_to_date(reqs):
+        venv_py=_python_mm(py)
+        if _deps_up_to_date(reqs,venv_py) and _venv_imports_ok(py):
             _step("ok","Requirements up to date","(cached)")
             _log("Deps fingerprint matches; skipping pip install")
         else:
@@ -753,7 +820,7 @@ def main():
                 _ui_error("Failed to install requirements")
                 print(tail)
                 return 6
-            _save_deps_state(reqs)
+            _save_deps_state(reqs,venv_py)
             _log(f"Deps installed ({time.time()-t0:.1f}s)")
     t0=time.time()
     ok,tail=_check_webview_runtime(py)
@@ -774,6 +841,15 @@ def main():
         _log(f"Launch failed: {msg}","ERROR")
         _ui_error(msg)
         return 7
+    rc=_app_died_early(_LAST_APP_PROC)
+    if rc is not None:
+        out=_last_launch_output()
+        _log(f"LOYA NG exited right after launch (code {rc}): {out[-500:]}","ERROR")
+        _ui_error(f"LOYA NG stopped right after starting (exit code {rc}).")
+        if out:print(_c(out,"dim"))
+        print("\n"+_c("Hint:","bold","cyan")+" details are in Logs/app_output.log and Logs/crash.log. Deleting the "
+              +(".venv_windows" if _is_win() else ".venv_linux")+" folder and running RunNote.py again rebuilds the environment.")
+        return 8
     _write_pid_file(pid)
     _log(f"Launched successfully (PID: {pid})","INFO")
     print()

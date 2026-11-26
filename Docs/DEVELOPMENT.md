@@ -23,7 +23,7 @@ Run `.claude/skills/ng-quality-gate/scripts/gate.sh`. It runs both suites, lists
 - Stage files by name. Never `git add -A`.
 - The repository is LF. Git for Windows usually has `core.autocrlf=true`, which rewrites files as CRLF on checkout. On Windows run `git config core.autocrlf false` once in your clone. Never commit a file whose only change is CRLF churn; `LICENSE` is a known offender.
 - Build release zips with `git -c core.autocrlf=false archive ...`, or Git for Windows puts CRLF into every text file of the package.
-- Keep `CurrentVersion.info`, `CurentVersion.info` and `DEFAULT_APP_VERSION` at the version in development (1.0.2). Change them only for a release.
+- Keep `CurrentVersion.info`, `CurentVersion.info` and `DEFAULT_APP_VERSION` at the version in development (1.0.3). Change them only for a release.
 - Add a regression test for every fix: Python in `tests/`, browser side logic in `tests/js/`.
 ## House rules
 - **Both platforms.** Every change must work on Windows and Linux. Gate platform code (`os.name`, `_IS_WINDOWS`, `_IS_LINUX`) and leave the other platform's behaviour unchanged.

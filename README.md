@@ -6,11 +6,11 @@
 
 **A local-first desktop workspace for penetration testers: notes, commands, targets, automation, reporting and CVE intel in one app.**
 
-This repository is **LOYA NG** (version 1.0.2), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
+This repository is **LOYA NG** (version 1.0.3), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
 
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational.svg)](#quick-start)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
-[![Version](https://img.shields.io/badge/version-1.0.2-blueviolet.svg)](Cores/Update/CurrentVersion.info)
+[![Version](https://img.shields.io/badge/version-1.0.3-blueviolet.svg)](Cores/Update/CurrentVersion.info)
 [![License](https://img.shields.io/badge/license-LOYA%20Community%20%28honor--based%29-green.svg)](LICENSE)
 
 </div>
@@ -579,7 +579,7 @@ A WSL pass is not a Linux pass. It covers the kernel-level behaviour above, but 
 Issues and pull requests are welcome at [github.com/emaldos/LOYA](https://github.com/emaldos/LOYA). A few house rules:
 
 - **Windows and Linux both.** Every change must work on both platforms; gate platform-specific code and keep the other platform's behaviour unchanged.
-- **Version changes are deliberate.** The version in development is 1.0.2; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
+- **Version changes are deliberate.** The version in development is 1.0.3; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
 - **LF line endings.** Do not commit files whose only change is CRLF churn.
 - Add a regression test for every fix (Python in `tests/`, browser-side logic in `tests/js/`).
 
@@ -660,6 +660,7 @@ Never include: `Data/`, `Logs/`, `Backups/`, `.venv_windows/`, `.venv_linux/`, `
 <details>
 <summary><b>Version history</b></summary>
 
+- **1.0.3**: the launcher notices when the system Python changes under an existing install (for example Kali moving from Python 3.13 to 3.14) and rebuilds the virtual environment by itself, rebuilds it when its Python no longer starts, ties the "requirements up to date" cache to the Python version, checks that pywebview really imports, and reports an app that stops right after starting with the real error instead of "LOYA NG is running".
 - **1.0.2**: fixes full terminal tabs (Open in terminal for Codex and Claude Code) closing at once with "[process exited]" on Windows, lists every AI provider in the AI panel grouped as Connected, Available and Not set up with the connected ones first, and writes version files with LF line endings.
 - **1.0.1**: fixes the Windows data hardening that could lock users out of their own `Data/` files (installs hit by it repair themselves on the next start), makes every AI write changeable command values as `{Element}` placeholders that reuse existing elements, adds full terminal mode with xterm.js (Claude Code, Codex, vim and htop run inside LOYA tabs), a terminal right click menu, crash diagnostics, a launcher startup screen, demo chain diagrams, smoother CLI connection setup and the developer docs in `Docs/`.
 - **1.0.0** (LOYA NG): resets the version numbering to mark the first stable release under the NG name. Its feature set is a strict superset of everything through 6.0.0 below. New since 6.0.0: real encryption at rest, freeform tags, a backlinks / note graph view, a resizable Terminal extension (CMD / PowerShell / shell sessions with in-app elevation), and a resizable AI extension (Ollama / LM Studio / hosted-API / external-MCP provider connections, live chat with tool-calling, an MCP server exposing the app's own operations as tools for any MCP client, and a granular AI Roles & Permissions system with Delete off by default), plus Reporting, Chain Diagrams and CVE Intel.

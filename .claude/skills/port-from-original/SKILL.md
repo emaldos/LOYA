@@ -31,7 +31,7 @@ Rank: high = data loss or core workflow broken; medium = noticeable behaviour di
 - `Cores/Bridge/api.py` is shared by everything: edit only the API class you own, re-read before each edit, keep edits small.
 - Escape user content inserted into HTML with the existing helpers; match the dense code style.
 - Keep Windows working; gate Linux-only behaviour on platform.
-- Never change the version (1.0.2 is in development); only the user decides a new one.
+- Never change the version (1.0.3 is in development); only the user decides a new one.
 - Add a test for every data-integrity fix (Python `tests/`, Node `tests/js/run.js`), then run the quality gate (`ng-quality-gate` skill).
 
 ## 4. Parallel work packages

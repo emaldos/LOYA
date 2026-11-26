@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 APP_NAME="LOYA NG"
-DEFAULT_APP_VERSION="1.0.2"
+DEFAULT_APP_VERSION="1.0.3"
 OFFICIAL_SOURCE_REPO="https://github.com/emaldos/LOYA"
 OFFICIAL_SOURCE_OWNER="emaldos"
 OFFICIAL_SOURCE_NAME="LOYA"

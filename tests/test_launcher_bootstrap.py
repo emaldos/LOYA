@@ -53,6 +53,81 @@ class VenvSiteDetectionTests(unittest.TestCase):
     def test_capitalised_value_is_accepted(self):
         self._write("include-system-site-packages = True\n")
         self.assertTrue(RunNote._venv_sees_system_site(self.dir))
+class VenvPythonChangeTests(unittest.TestCase):
+    """A distro upgrade (Kali: Python 3.13 -> 3.14) leaves the venv's python pointing at the new version while its packages
+    sit in lib/python3.13, so `import webview` fails. The launcher must notice and rebuild."""
+    def setUp(self):
+        self.dir=tempfile.mkdtemp(prefix="loya_venvpy_")
+    def tearDown(self):
+        shutil.rmtree(self.dir,ignore_errors=True)
+    def _cfg(self,body):
+        with open(os.path.join(self.dir,"pyvenv.cfg"),"w",encoding="utf-8") as f:f.write(body)
+    def test_built_for_version_is_read_from_pyvenv_cfg(self):
+        self._cfg("home = /usr/bin\ninclude-system-site-packages = true\nversion = 3.13.14\n")
+        self.assertEqual("3.13",RunNote._venv_cfg_python(self.dir))
+        self._cfg("version_info = 3.12.4.final.0\n")
+        self.assertEqual("3.12",RunNote._venv_cfg_python(self.dir))
+        os.remove(os.path.join(self.dir,"pyvenv.cfg"))
+        self.assertEqual("",RunNote._venv_cfg_python(self.dir))
+    def test_the_real_interpreter_version_is_reported(self):
+        self.assertEqual("%d.%d"%sys.version_info[:2],RunNote._python_mm(sys.executable))
+        self.assertEqual("",RunNote._python_mm(os.path.join(self.dir,"no-such-python")))
+    def test_a_changed_python_is_detected(self):
+        self._cfg("version = 3.13.14\n")
+        orig=RunNote._python_mm
+        try:
+            RunNote._python_mm=lambda py:"3.14"
+            self.assertEqual((True,"3.13","3.14"),RunNote._venv_python_changed(self.dir,"py"))
+            RunNote._python_mm=lambda py:"3.13"
+            self.assertFalse(RunNote._venv_python_changed(self.dir,"py")[0])
+            RunNote._python_mm=lambda py:""   # interpreter does not start: not judged here (the venv check handles it)
+            self.assertFalse(RunNote._venv_python_changed(self.dir,"py")[0])
+        finally:
+            RunNote._python_mm=orig
+    def test_deps_state_is_tied_to_the_venv_python(self):
+        orig=RunNote._abs
+        try:
+            RunNote._abs=lambda *p:os.path.join(self.dir,*p)
+            reqs=["pywebview==6.2.1"]
+            RunNote._save_deps_state(reqs,"3.13")
+            self.assertTrue(RunNote._deps_up_to_date(reqs,"3.13"))
+            self.assertFalse(RunNote._deps_up_to_date(reqs,"3.14"),"a new Python needs the packages again")
+            self.assertFalse(RunNote._deps_up_to_date(["pywebview==7"],"3.13"))
+        finally:
+            RunNote._abs=orig
+    def test_a_missing_critical_import_is_caught(self):
+        orig=RunNote._CRITICAL_IMPORTS
+        try:
+            RunNote._CRITICAL_IMPORTS=("json",)
+            self.assertTrue(RunNote._venv_imports_ok(sys.executable))
+            RunNote._CRITICAL_IMPORTS=("loya_no_such_module_xyz",)
+            self.assertFalse(RunNote._venv_imports_ok(sys.executable))
+        finally:
+            RunNote._CRITICAL_IMPORTS=orig
+class LaunchLivenessTests(unittest.TestCase):
+    """The launcher must not say "LOYA NG is running" for an app that died at once (the Python 3.14 upgrade case)."""
+    def test_an_app_that_dies_at_once_is_reported(self):
+        p=subprocess.Popen([sys.executable,"-c","import sys;sys.exit(3)"])
+        self.assertEqual(3,RunNote._app_died_early(p,wait=5))
+    def test_a_running_app_is_not_reported(self):
+        p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(5)"])
+        try:
+            self.assertIsNone(RunNote._app_died_early(p,wait=0.5))
+        finally:
+            p.kill();p.wait()
+    def test_no_handle_means_no_verdict(self):
+        self.assertIsNone(RunNote._app_died_early(None,wait=0))
+    def test_the_last_launch_output_is_shown(self):
+        d=tempfile.mkdtemp(prefix="loya_lastout_");orig=RunNote._abs
+        try:
+            RunNote._abs=lambda *p:os.path.join(d,*p)
+            os.makedirs(os.path.join(d,"Logs"))
+            with open(os.path.join(d,"Logs","app_output.log"),"w",encoding="utf-8") as f:
+                f.write("\n=== 2026-11-26 15:55:06 launch ===\nold error\n\n=== 2026-11-26 15:57:46 launch ===\nTraceback (most recent call last):\nModuleNotFoundError: No module named 'webview'\n")
+            out=RunNote._last_launch_output()
+            self.assertIn("No module named 'webview'",out);self.assertNotIn("old error",out)
+        finally:
+            RunNote._abs=orig;shutil.rmtree(d,ignore_errors=True)
 class LinuxAppEnvTests(unittest.TestCase):
     KEYS=("WEBKIT_DISABLE_DMABUF_RENDERER","WEBKIT_DMABUF_RENDERER_FORCE_SHM","WEBKIT_SKIA_ENABLE_CPU_RENDERING")
     def setUp(self):
