@@ -53,13 +53,17 @@ if(state==="signin_unknown")return "LOYA NG could not read its sign-in state. If
 if(state==="error")return "Open Settings > AI > Agents > Connections to see what is wrong."
 return ""
 }
-// The provider list: the CLI entries go last in the "Agents" group (created when no in-app agent is enabled).
-function cliAddToGroups(groups,states){
-const out=(groups||[]).map((g)=>({label:g.label,options:g.options.slice()}))
-let agents=out.find((g)=>g.label==="Agents")
-if(!agents){agents={label:"Agents",options:[]};out.push(agents)}
-Object.keys(CLI_ENTRY_KINDS).forEach((kind)=>agents.options.push({kind,label:cliOptionLabel(kind,(states||{})[CLI_ENTRY_KINDS[kind].tool])}))
-return out
+function cliCatalogState(state){
+if(state==="ready"||state==="signin_unknown")return "ready"
+if(state==="not_installed")return "setup"
+return "available"
+}
+function cliCatalogEntries(states){
+return Object.keys(CLI_ENTRY_KINDS).map((kind)=>{
+const state=(states||{})[CLI_ENTRY_KINDS[kind].tool]||"checking"
+const catalogState=cliCatalogState(state)
+return {kind,label:CLI_ENTRY_KINDS[kind].name,category:"cli",state:catalogState,reason:catalogState==="ready"?"":cliStateView(state).text.toLowerCase()}
+})
 }
 // Where to run it: a native LOYA terminal shell (never WSL: the Windows CLI is not on its PATH), else the OS terminal.
 function cliLaunchPlan(terminalOn,shellId){
@@ -90,11 +94,7 @@ return cliState.states
 return cliState.job
 }
 function cliUpdateOptionLabels(){
-const select=document.getElementById("aiProviderSelect")
-if(!select)return
-Array.from(select.options).forEach((o)=>{if(cliIsEntryKind(o.value))o.textContent=cliOptionLabel(o.value,cliState.states[cliToolOf(o.value)])})
-const v=select.value
-select.value=v  // ui-select: refresh the trigger's label
+if(typeof aiRefreshProviderSelect==="function")aiRefreshProviderSelect()
 }
 function cliUpdateView(){
 cliUpdateOptionLabels()
@@ -109,10 +109,8 @@ const kind=cliSelected()
 if(!kind||typeof aiSetStatusDot!=="function")return
 aiSetStatusDot(cliStateView(cliState.states[cliToolOf(kind)]).dot)
 }
-// ai.js: the provider list gets the CLI entries; the status poll never runs a CLI (the cached state is shown).
-function cliProviderGroups(groups){
-cliRefreshStates(false)
-return cliAddToGroups(groups,cliState.states)
+function cliProviderEntries(){
+return cliCatalogEntries(cliState.states)
 }
 function cliPollStatus(){cliSetDot()}
 // ai.js calls this from aiRenderChat: true when a CLI entry is shown instead of the chat.

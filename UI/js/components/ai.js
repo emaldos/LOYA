@@ -1,4 +1,4 @@
-let aiState={enabled:true,open:false,width:380,selectedKind:"",statusTimer:null,chatHistory:[],sending:false,sessionId:null,pricing:null,currentModel:"",activeStreamId:null,cancelRequested:false,lastStreamText:"",genToken:0,attachments:[],notices:[],promptHistory:[],historyIndex:-1,complete:{open:false,items:[],index:0,token:null,seq:0,timer:null}}
+let aiState={enabled:true,open:false,width:380,selectedKind:"",kindPickedByUser:false,catalog:[],catalogLoaded:false,defaultKind:"",statusTimer:null,chatHistory:[],sending:false,sessionId:null,pricing:null,currentModel:"",activeStreamId:null,cancelRequested:false,lastStreamText:"",genToken:0,attachments:[],notices:[],promptHistory:[],historyIndex:-1,complete:{open:false,items:[],index:0,token:null,seq:0,timer:null}}
 const AI_SLASH_COMMANDS=[
 {name:"help",args:"",desc:"List these commands",local:true},
 {name:"explain",args:"<command or output>",desc:"Explain a command or output - on its own, the terminal selection or last output",argKinds:["command"],argField:"detail"},
@@ -99,6 +99,7 @@ function aiRenderChat(){
 const wrap=document.getElementById("aiChatMessages")
 wrap.innerHTML=""
 if(typeof cliRenderIfSelected==="function"&&cliRenderIfSelected(wrap))return  // "your CLI" entry: no chat (ext-cli-launch.js)
+if(typeof aiSetupRenderIfSelected==="function"&&aiSetupRenderIfSelected(wrap))return
 if(!aiState.chatHistory.length&&!aiState.notices.length){
 const msg=aiState.selectedKind?"Ask the AI anything about your notes, commands, or targets.":"Enable a provider in Settings to start chatting."
 wrap.innerHTML=`<div class="ai-placeholder" id="aiChatEmpty"><i class="icon icon-brain"></i><p>${aiEscapeHtml(msg)}</p></div>`
@@ -247,6 +248,7 @@ poll()
 function aiChatSend(promptText){
 if(aiState.sending)return
 if(typeof cliRefuseChat==="function"&&cliRefuseChat())return
+if(typeof aiRefuseUnready==="function"&&aiRefuseUnready())return
 const input=document.getElementById("aiChatInput")
 const text=(promptText!==undefined?promptText:input.value).trim()
 if(!text)return
@@ -297,6 +299,7 @@ return list
 function aiSendPrompt(prompt,shown,attachments){
 if(aiState.sending)return Promise.reject(new Error("A message is already in progress."))
 if(typeof cliRefuseChat==="function"&&cliRefuseChat())return Promise.reject(new Error("Pick a chat provider: your own CLI runs in its terminal tab."))
+if(typeof aiRefuseUnready==="function"&&aiRefuseUnready())return Promise.reject(new Error("Pick a connected provider: this one is not set up yet."))
 if(!aiState.selectedKind){aiNoProvider();return Promise.reject(new Error("No AI provider is enabled."))}
 attachments=attachments||[]
 const turn={role:"user",content:prompt}
@@ -439,6 +442,7 @@ aiNotice(rows.length?"Matches for \""+arg+"\" - click to attach:":"Nothing match
 function aiSendExternalPrompt(text){
 if(!aiState.selectedKind)return Promise.reject(new Error("Enable an AI provider in Settings first."))
 if(typeof cliRefuseChat==="function"&&cliRefuseChat())return Promise.reject(new Error("Pick a chat provider: your own CLI runs in its terminal tab."))
+if(typeof aiRefuseUnready==="function"&&aiRefuseUnready())return Promise.reject(new Error("Pick a connected provider: this one is not set up yet."))
 if(aiState.sending)return Promise.reject(new Error("A message is already in progress."))
 aiState.chatHistory=[...aiState.chatHistory,{role:"user",content:text}]
 aiRenderChat()
@@ -571,6 +575,7 @@ dot.className="ai-status-dot"+(status==="online"?" online":status==="offline"?" 
 }
 function aiPollStatus(){
 if(!aiState.selectedKind){aiSetStatusDot("");return}
+if(typeof aiSelectedUnready==="function"&&aiSelectedUnready()){aiSetStatusDot("offline");return}
 if(typeof cliIsEntryKind==="function"&&cliIsEntryKind(aiState.selectedKind)){cliPollStatus();return}
 if(typeof extIsAgentKind==="function"&&extIsAgentKind(aiState.selectedKind)){bridgeCall("extAgents.status",[aiState.selectedKind]).then((r)=>aiSetStatusDot(r&&r.ready?"online":"offline")).catch(()=>aiSetStatusDot("offline"));return}
 bridgeCall("ai.test_provider",[aiState.selectedKind]).then((r)=>aiSetStatusDot(r&&r.status==="online"?"online":"offline")).catch(()=>aiSetStatusDot("offline"))
@@ -585,48 +590,21 @@ if(aiState.statusTimer)clearInterval(aiState.statusTimer)
 aiState.statusTimer=null
 }
 function aiPopulateProviderSelect(){
-const select=document.getElementById("aiProviderSelect")
-const agentsCall=typeof extProviderGroups==="function"?bridgeCall("extAgents.enabled").catch(()=>[]):Promise.resolve([])
-return Promise.all([bridgeCall("ai.enabled_providers"),bridgeCall("ai.get_default"),agentsCall]).then(([list,defaultKind,agents])=>{
-select.innerHTML=""
-const withCli=typeof cliProviderGroups==="function"&&typeof extProviderGroups==="function"
-if((agents&&agents.length)||withCli){
-const groups=withCli?cliProviderGroups(extProviderGroups(list,agents||[])):extProviderGroups(list,agents)
-select.disabled=false
-groups.forEach((g)=>{
-const og=document.createElement("optgroup")
-og.label=g.label
-g.options.forEach((o)=>{const opt=document.createElement("option");opt.value=o.kind;opt.textContent=o.label;og.appendChild(opt)})
-select.appendChild(og)
-})
-const pick=extPickProvider(groups,aiState.selectedKind,defaultKind)
-select.value=pick
-aiState.selectedKind=pick
-if(typeof extAgentsOnProviderChange==="function")extAgentsOnProviderChange(pick)
-return
-}
-if(!list.length){
-const opt=document.createElement("option")
-opt.value=""
-opt.textContent="No providers enabled"
-select.appendChild(opt)
-select.disabled=true
-aiState.selectedKind=""
-aiSetStatusDot("")
-return
-}
-select.disabled=false
-list.forEach((p)=>{
-const opt=document.createElement("option")
-opt.value=p.kind
-opt.textContent=p.label
-select.appendChild(opt)
-})
-const pick=list.some((p)=>p.kind===aiState.selectedKind)?aiState.selectedKind:(list.some((p)=>p.kind===defaultKind)?defaultKind:list[0].kind)
-select.value=pick
-aiState.selectedKind=pick
-if(typeof extAgentsOnProviderChange==="function")extAgentsOnProviderChange(pick)
+return Promise.all([bridgeCall("ai.provider_catalog").catch(()=>[]),bridgeCall("ai.get_default").catch(()=>null)]).then(([catalog,defaultKind])=>{
+aiState.catalog=Array.isArray(catalog)?catalog:[]
+aiState.defaultKind=defaultKind||""
+aiState.catalogLoaded=true
+aiRenderProviderSelect()
+if(!aiState.selectedKind)aiSetStatusDot("")
+if(typeof extAgentsOnProviderChange==="function")extAgentsOnProviderChange(aiState.selectedKind)
+if(typeof cliRefreshStates==="function")cliRefreshStates(false)
 }).then(aiRenderChat)
+}
+function aiOnProviderSelected(){
+if(typeof extAgentsOnProviderChange==="function")extAgentsOnProviderChange(aiState.selectedKind)
+aiPollStatus()
+aiRenderChat()
+aiRefreshCurrentModel()
 }
 function aiOpenPanel(){
 aiState.open=true
@@ -671,10 +649,8 @@ document.getElementById("aiNewSessionBtn").addEventListener("click",aiNewSession
 document.getElementById("aiClearSessionBtn").addEventListener("click",aiClearSession)
 document.getElementById("aiProviderSelect").addEventListener("change",(e)=>{
 aiState.selectedKind=e.target.value
-if(typeof extAgentsOnProviderChange==="function")extAgentsOnProviderChange(aiState.selectedKind)
-aiPollStatus()
-aiRenderChat()
-aiRefreshCurrentModel()
+aiState.kindPickedByUser=true
+aiOnProviderSelected()
 })
 bridgeCall("ai.pricing_table").then((table)=>{aiState.pricing=table;aiRenderUsage()}).catch(()=>{})
 document.getElementById("aiChatSendBtn").addEventListener("click",()=>{

@@ -11,7 +11,7 @@ const py=read("Cores","Services","ext_cli_launch.py")
 const start=source.indexOf("// ---- cli pure start")
 const end=source.indexOf("// ---- cli pure end")
 if(start<0||end<start)throw new Error("could not find the pure helpers in ext-cli-launch.js")
-const api=new Function(source.slice(start,end)+"\nreturn {cliCanOpen,CLI_ENTRY_KINDS,CLI_STARTERS,cliIsEntryKind,cliToolOf,cliKindOf,cliEntryState,cliStateView,cliOptionLabel,cliHelperText,cliNextStep,cliAddToGroups,cliLaunchPlan}")()
+const api=new Function(source.slice(start,end)+"\nreturn {cliCanOpen,CLI_ENTRY_KINDS,CLI_STARTERS,cliIsEntryKind,cliToolOf,cliKindOf,cliEntryState,cliStateView,cliOptionLabel,cliHelperText,cliNextStep,cliCatalogState,cliCatalogEntries,cliLaunchPlan}")()
 let passed=0,failed=0
 function check(name,cond,detail){if(cond){passed++;return}failed++;console.log("  FAIL  "+name+(detail?"  ->  "+detail:""))}
 function eq(name,a,b){check(name,JSON.stringify(a)===JSON.stringify(b),JSON.stringify(a)+" != "+JSON.stringify(b))}
@@ -37,15 +37,15 @@ eq("option label",[api.cliOptionLabel("cli:claude_code"),api.cliOptionLabel("cli
 eq("helper line",api.cliHelperText("cli:claude_code"),"Runs the official Claude Code in a LOYA NG terminal on your own account. It uses LOYA NG through its tools, and AI Roles decide each call.")
 check("codex helper",/official Codex CLI in a LOYA NG terminal/.test(api.cliHelperText("cli:codex_cli")))
 check("next steps point to Connections",["not_installed","not_signed_in","not_connected","error"].every((s)=>/Settings > AI > Agents > Connections/.test(api.cliNextStep(s)))&&api.cliNextStep("ready")==="")
-// ---- provider list: last in the Agents group, created when needed; input groups are not changed
-const base=[{label:"LOYA AI",options:[{kind:"api",label:"API"}]},{label:"Agents",options:[{kind:"ext:claude",label:"Claude Agent"}]}]
-const g=api.cliAddToGroups(base,{claude_code:"ready"})
-eq("agents group order",g[1].options.map((o)=>o.kind),["ext:claude","cli:claude_code","cli:codex_cli"])
-eq("labels carry state",g[1].options.map((o)=>o.label).slice(1),["Claude Code (your CLI) - ready","Codex CLI (your CLI)"])
-eq("input untouched",base[1].options.length,1)
-const g2=api.cliAddToGroups([{label:"LOYA AI",options:[{kind:"api",label:"API"}]}],{})
-eq("agents group created",g2.map((x)=>x.label),["LOYA AI","Agents"])
-eq("only cli",api.cliAddToGroups([],{}).map((x)=>x.options.length),[2])
+// ---- provider list: each CLI is a catalog entry; ready or sign-in unknown is connected, not installed is not set up, the rest is available
+eq("catalog states",["ready","signin_unknown","not_connected","not_signed_in","checking","error","not_installed"].map(api.cliCatalogState),["ready","ready","available","available","available","available","setup"])
+const entries=api.cliCatalogEntries({claude_code:"not_installed",codex_cli:"ready"})
+eq("both CLIs listed",entries.map((e)=>e.kind),["cli:claude_code","cli:codex_cli"])
+eq("cli category",entries.map((e)=>e.category),["cli","cli"])
+eq("entry states",entries.map((e)=>e.state),["setup","ready"])
+eq("reason only when not ready",entries.map((e)=>e.reason),["not installed",""])
+eq("names without the tag",entries.map((e)=>e.label),["Claude Code","Codex CLI"])
+eq("unknown state is checking",api.cliCatalogEntries({}).map((e)=>[e.state,e.reason]),[["available","checking"],["available","checking"]])
 // ---- launch plan: native LOYA shell, else the OS terminal (Terminal extension off, or only WSL)
 eq("loya shell",api.cliLaunchPlan(true,"shell"),{via:"loya",shell:"shell"})
 eq("windows pwsh",api.cliLaunchPlan(true,"pwsh"),{via:"loya",shell:"pwsh"})

@@ -1772,6 +1772,8 @@ class AIAPI:
         return _mcp_local_svc.stop_server()
     def enabled_providers(self):
         return _ai_svc.enabled_providers()
+    def provider_catalog(self):
+        return _ai_svc.provider_catalog()
     def get_default(self):
         return _ai_svc.get_default_provider()
     def set_default(self,kind):

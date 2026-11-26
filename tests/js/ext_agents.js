@@ -5,7 +5,7 @@ const source=fs.readFileSync(path.join(ROOT,"UI","js","components","ext-agents.j
 const start=source.indexOf("// ---- ext pure start")
 const end=source.indexOf("// ---- ext pure end")
 if(start<0||end<start)throw new Error("could not find the pure helpers in ext-agents.js")
-const api=new Function(source.slice(start,end)+"\nreturn {EXT_AGENT_KINDS,extIsAgentKind,extProviderOf,extProviderGroups,extPickProvider,extSkillMatches,extMergeSlashRows,extFindSkill,extBannerText,extStatusPill}")()
+const api=new Function(source.slice(start,end)+"\nreturn {EXT_AGENT_KINDS,extIsAgentKind,extProviderOf,extSkillMatches,extMergeSlashRows,extFindSkill,extBannerText,extStatusPill}")()
 const aiSource=fs.readFileSync(path.join(ROOT,"UI","js","components","ai.js"),"utf8")
 const ai=new Function(aiSource.slice(aiSource.indexOf("const AI_SLASH_COMMANDS"),aiSource.indexOf("function aiEscapeHtml"))+"\nreturn {AI_SLASH_COMMANDS,aiChainMatches,aiSlashMatches,aiParseSlash}")()
 let passed=0,failed=0
@@ -14,17 +14,7 @@ function eq(name,a,b){check(name,JSON.stringify(a)===JSON.stringify(b),JSON.stri
 // provider selector
 eq("agent kinds",[api.extIsAgentKind("ext:claude"),api.extIsAgentKind("ext:codex"),api.extIsAgentKind("api"),api.extIsAgentKind("")],[true,true,false,false])
 eq("provider of",[api.extProviderOf("ext:codex"),api.extProviderOf("ollama")],["codex",""])
-const groups=api.extProviderGroups([{kind:"api",label:"API"},{kind:"ollama",label:"Ollama"}],[{kind:"ext:claude",label:"x"},{kind:"ext:codex"}])
-eq("groups labelled LOYA AI / Agents",groups.map((g)=>g.label),["LOYA AI","Agents"])
-eq("agent labels are fixed, never 'Claude Code'",groups[1].options.map((o)=>o.label),["Claude Agent","OpenAI Codex"])
 check("no Claude Code branding anywhere",!/Claude Code/.test(source.replace(/claude-agent-sdk/g,"")))
-eq("only agents",api.extProviderGroups([],[{kind:"ext:codex"}]).map((g)=>g.label),["Agents"])
-eq("nothing enabled",api.extProviderGroups([],[]),[])
-eq("unknown agent kinds dropped",api.extProviderGroups([],[{kind:"ext:evil"}]),[])
-eq("pick keeps current",api.extPickProvider(groups,"ext:codex","api"),"ext:codex")
-eq("pick falls back to default",api.extPickProvider(groups,"lmstudio","ollama"),"ollama")
-eq("pick first",api.extPickProvider(groups,"",""),"api")
-eq("pick none",api.extPickProvider([],"",""),"")
 // "/" popup merge
 const skills=[{name:"recon-sum",description:"Summarise recon",source:"personal (~/.claude/skills)",kind:"skill",provider:"claude"},{name:"compact",source:"reported by Claude Agent",kind:"command",provider:"claude"},{name:"help",source:"project",kind:"skill",provider:"claude"},{name:"nmap-chain",source:"project",kind:"skill",provider:"claude"}]
 const rows=api.extSkillMatches(skills,"",["help","/nmap-chain"])

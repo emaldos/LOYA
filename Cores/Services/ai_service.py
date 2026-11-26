@@ -131,6 +131,38 @@ def set_provider(kind,cfg):
 def enabled_providers():
     providers=get_providers()
     return [{"kind":k,"label":PROVIDER_LABELS[k]} for k in CHAT_PROVIDER_TYPES if providers[k]["enabled"]]
+_AGENT_REASON_TEXT={"not_installed":"not installed","no_key":"no API key","consent_required":"needs consent","reconsent_required":"needs consent again","disabled":"off"}
+def _local_installed(kind):
+    if kind=="ollama":return bool(shutil.which("ollama"))
+    return any(os.path.exists(p) for p in _LMSTUDIO_INSTALL_HINTS)
+def _catalog_entry(kind,label,category,state,reason=""):
+    return {"kind":kind,"label":label,"category":category,"state":state,"reason":reason}
+def provider_catalog():
+    providers=get_providers()
+    api=providers["api"]
+    api_label="Anthropic API" if api.get("provider_kind")=="anthropic" else "OpenAI-compatible API"
+    key_set=bool(api.get("api_key"))
+    if api["enabled"] and key_set:api_entry=_catalog_entry("api",api_label,"api","ready")
+    elif api["enabled"]:api_entry=_catalog_entry("api",api_label,"api","available","no API key")
+    elif key_set:api_entry=_catalog_entry("api",api_label,"api","available","off")
+    else:api_entry=_catalog_entry("api",api_label,"api","setup","not set up")
+    entries=[api_entry]
+    for kind in ("ollama","lmstudio"):
+        if providers[kind]["enabled"]:entries.append(_catalog_entry(kind,PROVIDER_LABELS[kind],"local","ready"))
+        elif _local_installed(kind):entries.append(_catalog_entry(kind,PROVIDER_LABELS[kind],"local","available","off"))
+        else:entries.append(_catalog_entry(kind,PROVIDER_LABELS[kind],"local","setup","not installed"))
+    try:
+        from Cores.Services import ext_agents_service as _ext_agents
+        agent_statuses=[(provider,_ext_agents.provider_status(provider)) for provider in _ext_agents.PROVIDERS]
+    except Exception:
+        agent_statuses=[]
+    for provider,status in agent_statuses:
+        label=status.get("label") or provider
+        if status.get("ready"):state,reason="ready",""
+        elif status.get("installed"):state,reason="available",_AGENT_REASON_TEXT.get(status.get("reason"),"off")
+        else:state,reason="setup","not installed"
+        entries.append(_catalog_entry("ext:"+provider,label,"agent",state,reason))
+    return entries
 def get_default_provider():
     ext=_extensions(_read_settings())
     kind=ext.get("ai_default_provider")

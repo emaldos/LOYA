@@ -4,20 +4,6 @@
 const EXT_AGENT_KINDS={"ext:claude":{provider:"claude",label:"Claude Agent",vendor:"Anthropic"},"ext:codex":{provider:"codex",label:"OpenAI Codex",vendor:"OpenAI"}}
 function extIsAgentKind(kind){return Object.prototype.hasOwnProperty.call(EXT_AGENT_KINDS,String(kind||""))}
 function extProviderOf(kind){return extIsAgentKind(kind)?EXT_AGENT_KINDS[kind].provider:""}
-function extProviderGroups(loyaList,agentList){
-const groups=[]
-const loya=(loyaList||[]).filter((p)=>p&&p.kind&&!extIsAgentKind(p.kind)).map((p)=>({kind:p.kind,label:p.label||p.kind}))
-const agents=(agentList||[]).filter((p)=>p&&extIsAgentKind(p.kind)).map((p)=>({kind:p.kind,label:EXT_AGENT_KINDS[p.kind].label}))
-if(loya.length)groups.push({label:"LOYA AI",options:loya})
-if(agents.length)groups.push({label:"Agents",options:agents})
-return groups
-}
-function extPickProvider(groups,current,preferred){
-const all=[].concat(...(groups||[]).map((g)=>g.options.map((o)=>o.kind)))
-if(current&&all.includes(current))return current
-if(preferred&&all.includes(preferred))return preferred
-return all[0]||""
-}
 function extSkillMatches(skills,query,taken){
 const q=String(query||"").toLowerCase()
 const takenSet=new Set((taken||[]).map((n)=>String(n).toLowerCase().replace(/^\//,"")))
