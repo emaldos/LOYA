@@ -33,7 +33,7 @@ def _write_json(path,obj):
     os.replace(tmp,path)
 def _write_text(path,text):
     os.makedirs(os.path.dirname(path),exist_ok=True)
-    with open(path,"w",encoding="utf-8") as fh:
+    with open(path,"w",encoding="utf-8",newline="\n") as fh:
         fh.write(str(text))
 def _within_root(path,root):
     try:

@@ -7,7 +7,8 @@ This page is for anyone picking the project up later: where the code came from, 
 | LOYA Note 5.1.2 | Already running check no longer kills the open app on Windows, stale pid files cleaned, `datetime.utcnow()` removed, `cryptography` 42.0.5 to 48.0.1 | Bug fix patch |
 | LOYA Note 6.0.0 | PyQt6 UI replaced by a local HTML, CSS and JS UI in a native pywebview window (WebView2 on Windows, WebKitGTK on Linux), plus a customizable Dashboard. Qt only HTML, PDF and structured Markdown note import and export were retired | One UI stack for both platforms, easier to style and test |
 | LOYA NG 1.0.0 (2026-11-24) | Version numbering reset. Superset of 6.0.0 plus encryption at rest (SQLCipher and Argon2id), tags and a backlinks graph, the Terminal extension, the AI extension with an MCP server and AI Roles, Reporting, Chain Diagrams and CVE Intel | First public release under the NG name. Moving from 5.x or 6.0.0 is a one time fresh install, because the updater only accepts a strictly greater version |
-| LOYA NG 1.0.1 | Fixes and features listed below | First update on top of the public release |
+| LOYA NG 1.0.1 (2026-11-26) | Fixes and features listed below | First update on top of the public release |
+| LOYA NG 1.0.2 (2026-11-26) | Full terminal tabs work when the app runs without a console, and the AI panel lists every provider with the connected ones first | Bugs found right after 1.0.1 shipped |
 ## Since the 1.0.0 public release
 - Settings > AI reorganized: Agents first, Connections on top, AI Assistant moved in.
 - Crash diagnostics: `Logs/crash.log` through faulthandler, uncaught errors to the Note log, app output to `Logs/app_output.log`.
@@ -45,6 +46,8 @@ This page is for anyone picking the project up later: where the code came from, 
 - **No keyring held key when encryption is off.** The PIN derives a key with Argon2id. A keyring key would add lock out risk for little protection and would bind backups to one machine.
 - **A restore never rolls back the audit log and never silently brings back an old PIN.**
 - **On Windows, `icacls` with `(OI)(CI)` grants and `/T` empties file ACLs.** Harden the folder only and let the files inherit.
+- **ConPTY children inherit a redirected parent's stdio.** LOYA runs under `pythonw` with stdout sent to a log, so `CreateProcessW` must pass `STARTF_USESTDHANDLES` with null handles, or the shell writes to the log, reads EOF and exits. Test ConPTY from a process with redirected stdio, not from a console.
+- **Git for Windows converts line endings on checkout and on `git archive`** when `core.autocrlf=true`. This repository sets `core.autocrlf=false` locally, and release zips are built with `git -c core.autocrlf=false archive`, so Linux installs never get CRLF shell scripts. Files the app writes itself use `newline="\n"`.
 - **AI tooling never gets literal target values in saved commands.** Values that change per target are elements, so one command works on every target.
 ## Ideas that were planned but not built
 ### Decisions waiting for the owner

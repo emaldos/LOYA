@@ -54,4 +54,15 @@ class UpdaterSourceTests(unittest.TestCase):
     def test_the_windows_app_id_is_unchanged_by_the_move(self):
         # Internal id kept for compatibility: taskbar pins and toast settings on Windows are tied to it.
         self.assertEqual("emaldos.LOYA.Note.NG.1.0.0",h.build_windows_app_id("1.0.0"))
+class VersionFileLineEndingTests(unittest.TestCase):
+    def test_version_files_are_written_with_lf_on_every_platform(self):
+        import os,tempfile
+        with tempfile.TemporaryDirectory() as work:
+            helper_path=os.path.join(work,"helper.info")
+            h.write_text(helper_path,"1.2.3\n")
+            ap._write_version_files(work,"1.2.3")
+            with open(helper_path,"rb") as handle:helper_bytes=handle.read()
+            with open(os.path.join(work,"Cores","Update","CurrentVersion.info"),"rb") as handle:apply_bytes=handle.read()
+        self.assertEqual(b"1.2.3\n",helper_bytes)
+        self.assertEqual(b"1.2.3\n",apply_bytes)
 if __name__=="__main__":unittest.main()

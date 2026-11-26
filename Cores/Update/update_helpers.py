@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 APP_NAME="LOYA NG"
-DEFAULT_APP_VERSION="1.0.1"
+DEFAULT_APP_VERSION="1.0.2"
 OFFICIAL_SOURCE_REPO="https://github.com/emaldos/LOYA"
 OFFICIAL_SOURCE_OWNER="emaldos"
 OFFICIAL_SOURCE_NAME="LOYA"
@@ -202,7 +202,7 @@ def read_text(path,default=""):
 def write_text(path,text):
     path=str(path)
     os.makedirs(os.path.dirname(path),exist_ok=True)
-    with open(path,"w",encoding="utf-8") as fh:
+    with open(path,"w",encoding="utf-8",newline="\n") as fh:
         fh.write(str(text))
 def _to_size(value):
     try:

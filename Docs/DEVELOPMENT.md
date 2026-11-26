@@ -21,8 +21,9 @@ On the Windows machine used for 1.0.1, about 55 tests failed before any 1.0.1 ch
 ## Before every commit
 Run `.claude/skills/ng-quality-gate/scripts/gate.sh`. It runs both suites, lists line ending churn, checks the version files and refuses to stage `Data/`, `Logs/`, `Backups/`, `.env` or key shaped secrets.
 - Stage files by name. Never `git add -A`.
-- The repository is LF. Git for Windows usually has `core.autocrlf=true`, so files edited on Windows can show whole file diffs with no real change. Never commit a file whose only change is CRLF churn; `LICENSE` is a known offender.
-- Keep `CurrentVersion.info`, `CurentVersion.info` and `DEFAULT_APP_VERSION` at the version in development (1.0.1). Change them only for a release.
+- The repository is LF. Git for Windows usually has `core.autocrlf=true`, which rewrites files as CRLF on checkout. On Windows run `git config core.autocrlf false` once in your clone. Never commit a file whose only change is CRLF churn; `LICENSE` is a known offender.
+- Build release zips with `git -c core.autocrlf=false archive ...`, or Git for Windows puts CRLF into every text file of the package.
+- Keep `CurrentVersion.info`, `CurentVersion.info` and `DEFAULT_APP_VERSION` at the version in development (1.0.2). Change them only for a release.
 - Add a regression test for every fix: Python in `tests/`, browser side logic in `tests/js/`.
 ## House rules
 - **Both platforms.** Every change must work on Windows and Linux. Gate platform code (`os.name`, `_IS_WINDOWS`, `_IS_LINUX`) and leave the other platform's behaviour unchanged.

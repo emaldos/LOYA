@@ -6,11 +6,11 @@
 
 **A local-first desktop workspace for penetration testers: notes, commands, targets, automation, reporting and CVE intel in one app.**
 
-This repository is **LOYA NG** (version 1.0.1), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
+This repository is **LOYA NG** (version 1.0.2), the next generation of the original [LOYA Note](https://github.com/emaldos/LOYA-Note).
 
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational.svg)](#quick-start)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
-[![Version](https://img.shields.io/badge/version-1.0.1-blueviolet.svg)](Cores/Update/CurrentVersion.info)
+[![Version](https://img.shields.io/badge/version-1.0.2-blueviolet.svg)](Cores/Update/CurrentVersion.info)
 [![License](https://img.shields.io/badge/license-LOYA%20Community%20%28honor--based%29-green.svg)](LICENSE)
 
 </div>
@@ -579,7 +579,7 @@ A WSL pass is not a Linux pass. It covers the kernel-level behaviour above, but 
 Issues and pull requests are welcome at [github.com/emaldos/LOYA](https://github.com/emaldos/LOYA). A few house rules:
 
 - **Windows and Linux both.** Every change must work on both platforms; gate platform-specific code and keep the other platform's behaviour unchanged.
-- **Version changes are deliberate.** The version in development is 1.0.1; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
+- **Version changes are deliberate.** The version in development is 1.0.2; only change `CurrentVersion.info` and `DEFAULT_APP_VERSION` as part of a release.
 - **LF line endings.** Do not commit files whose only change is CRLF churn.
 - Add a regression test for every fix (Python in `tests/`, browser-side logic in `tests/js/`).
 
@@ -622,7 +622,7 @@ How to publish a LOYA NG release the in-app updater accepts:
 1. Bump the version in [`CurrentVersion.info`](Cores/Update/CurrentVersion.info), `DEFAULT_APP_VERSION` in [`update_helpers.py`](Cores/Update/update_helpers.py) and the README, commit, and push to the official repository. The packaged `CurrentVersion.info` **must equal** the release version or the package is refused
 2. Tag the commit `vX.Y.Z` (plain `MAJOR.MINOR.PATCH`; `-beta`/`-rc` tags are never installed) and push the tag
 3. Build the package from the tag. Asset name must be exactly `<PREFIX>vX.Y.Z.zip`, where `<PREFIX>` is `PACKAGE_ASSET_PREFIX` in [`update_helpers.py`](Cores/Update/update_helpers.py):
-   `git archive --format=zip --prefix=<PREFIX>vX.Y.Z/ -o <PREFIX>vX.Y.Z.zip vX.Y.Z`
+   `git -c core.autocrlf=false archive --format=zip --prefix=<PREFIX>vX.Y.Z/ -o <PREFIX>vX.Y.Z.zip vX.Y.Z`
    (one top folder is fine; it must contain `Assets/`, `Cores/`, `UI/`, `LOYA_Note.py`, `RunNote.py`, `Requirements.json`, `Cores/Update/CurrentVersion.info`, `Cores/Update/apply_update.py`, `UI/windows/main.html`; no `Data/`, `Logs/`, `Backups/` or venvs; at most 200 MB)
    Then build the offline CVE index and put it into that zip (it is not in git: about 20 MB that changes with every build):
    `python tools/build_cve_index.py --add-to-package <PREFIX>vX.Y.Z.zip`
@@ -660,6 +660,7 @@ Never include: `Data/`, `Logs/`, `Backups/`, `.venv_windows/`, `.venv_linux/`, `
 <details>
 <summary><b>Version history</b></summary>
 
+- **1.0.2**: fixes full terminal tabs (Open in terminal for Codex and Claude Code) closing at once with "[process exited]" on Windows, lists every AI provider in the AI panel grouped as Connected, Available and Not set up with the connected ones first, and writes version files with LF line endings.
 - **1.0.1**: fixes the Windows data hardening that could lock users out of their own `Data/` files (installs hit by it repair themselves on the next start), makes every AI write changeable command values as `{Element}` placeholders that reuse existing elements, adds full terminal mode with xterm.js (Claude Code, Codex, vim and htop run inside LOYA tabs), a terminal right click menu, crash diagnostics, a launcher startup screen, demo chain diagrams, smoother CLI connection setup and the developer docs in `Docs/`.
 - **1.0.0** (LOYA NG): resets the version numbering to mark the first stable release under the NG name. Its feature set is a strict superset of everything through 6.0.0 below. New since 6.0.0: real encryption at rest, freeform tags, a backlinks / note graph view, a resizable Terminal extension (CMD / PowerShell / shell sessions with in-app elevation), and a resizable AI extension (Ollama / LM Studio / hosted-API / external-MCP provider connections, live chat with tool-calling, an MCP server exposing the app's own operations as tools for any MCP client, and a granular AI Roles & Permissions system with Delete off by default), plus Reporting, Chain Diagrams and CVE Intel.
 - **6.0.0** replaced the PyQt6 desktop UI with a local HTML/CSS/JS interface rendered in its own native window via `pywebview`, plus a customizable Dashboard. Every other feature area carried over with full functional parity, with one deliberate exception: the original's Notes/Commands HTML, PDF and structured-Markdown import-export formats (Qt-dependent) were retired. Linux/WebKitGTK was implemented and confirmed on real Linux hardware (Kali rolling, XFCE on X11 with xfwm4).
