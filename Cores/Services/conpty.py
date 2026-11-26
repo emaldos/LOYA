@@ -6,6 +6,7 @@ LPPROC_THREAD_ATTRIBUTE_LIST=ctypes.c_void_p
 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE=0x00020016
 EXTENDED_STARTUPINFO_PRESENT=0x00080000
 CREATE_UNICODE_ENVIRONMENT=0x00000400
+STARTF_USESTDHANDLES=0x00000100
 STILL_ACTIVE=259
 class COORD(ctypes.Structure):
     _fields_=[("X",wintypes.SHORT),("Y",wintypes.SHORT)]
@@ -96,6 +97,10 @@ class ConptySession:
             raise OSError(ctypes.get_last_error(),"UpdateProcThreadAttribute failed")
         startup=STARTUPINFOEXW()
         startup.StartupInfo.cb=ctypes.sizeof(STARTUPINFOEXW)
+        startup.StartupInfo.dwFlags=STARTF_USESTDHANDLES
+        startup.StartupInfo.hStdInput=None
+        startup.StartupInfo.hStdOutput=None
+        startup.StartupInfo.hStdError=None
         startup.lpAttributeList=attribute_list
         info=PROCESS_INFORMATION()
         command=ctypes.create_unicode_buffer(_command_line(cmd))
